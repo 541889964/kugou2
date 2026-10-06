@@ -26,9 +26,7 @@ jobs:
           cp /tmp/ours-pubspec.yaml pubspec.yaml
           rm -rf assets
           cp -r /tmp/ours-assets assets
-          echo "=== pubspec assets 段 ==="
           grep -A5 "assets:" pubspec.yaml
-          echo "=== assets 目录 ==="
           ls -lh assets/
 
       - name: 清缓存
@@ -39,42 +37,37 @@ jobs:
       - run: cp android_manifest.xml android/app/src/main/AndroidManifest.xml
       - run: flutter pub get
 
-      - name: 再检查 pubspec
-        run: |
-          echo "=== pub get 后 pubspec assets 段 ==="
-          grep -A5 "assets:" pubspec.yaml
-
       - name: Build
-        id: b
-        continue-on-error: true
-        run: flutter build apk --release 2>&1 | tee /tmp/build.log
+        run: flutter build apk --release
 
-      - name: 直接验证 APK 里有没有 wallpaper
-        if: steps.b.outcome == 'success'
+      - name: 定位 APK + 验证 wallpaper
         run: |
-          APK=$(find build -name "*.apk" | head -1)
-          echo "APK: $APK"
+          echo "=== 所有 apk ==="
+          find build -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "(find 失败)"
+
+          APK=$(find build -name "app-release.apk" 2>/dev/null | head -1)
+          [ -z "$APK" ] && APK=$(find build -name "*.apk" 2>/dev/null | head -1)
+          echo "APK=$APK"
+
+          if [ -z "$APK" ]; then
+            echo "✗ 找不到 APK"
+            ls -laR build/app/outputs/ 2>&1 | head -50
+            exit 1
+          fi
+
+          echo ""
+          echo "=== 验证 wallpaper ==="
           if unzip -l "$APK" | grep -i wallpaper; then
             echo "✓✓✓ wallpaper 已打包"
           else
-            echo "✗✗✗ wallpaper 没打进去！！！"
-            echo "--- pubspec.yaml 全文 ---"
+            echo "✗✗✗ wallpaper 没打进去"
             cat pubspec.yaml
-            echo "--- assets 目录 ---"
-            ls -laR assets/
+            exit 1
           fi
 
-      - if: steps.b.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with: {name: build-error-log, path: /tmp/build.log}
-      - if: steps.b.outcome == 'failure'
-        run: exit 1
-
-      - name: Find APK
-        run: |
-          APK=$(find build -name "*.apk" -type f 2>/dev/null | head -1)
-          [ -z "$APK" ] && exit 1
-          mkdir -p out && cp "$APK" out/KuGou.apk
+          mkdir -p out
+          cp "$APK" out/KuGou.apk
+          ls -lh out/KuGou.apk
 
       - uses: softprops/action-gh-release@v2
         with:
