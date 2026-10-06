@@ -106,8 +106,7 @@ class PlayerPage extends StatelessWidget {
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
               overlayShape: const RoundSliderOverlayShape(overlayRadius: 14)),
             child: Slider(value: cur, max: max > 0 ? max : 1,
-              onChanged: max > 0 ? (v) => p.seek(Duration(milliseconds: v.toInt())) : null,
-              activeTrackColor: Colors.white, inactiveTrackColor: Colors.white24, thumbColor: Colors.white))),
+              onChanged: max > 0 ? (v) => p.seek(Duration(milliseconds: v.toInt())) : null))),
         Padding(padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Text(_f(p.position), style: const TextStyle(fontSize: 11, color: Colors.white60)),
