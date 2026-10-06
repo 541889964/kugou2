@@ -13,31 +13,69 @@ jobs:
         with: {distribution: 'zulu', java-version: '17'}
       - uses: subosito/flutter-action@v2
         with: {flutter-version: '3.27.1', channel: 'stable', cache: true}
-      - run: flutter create --org com.kugou --project-name kugou --platforms=android .
-      - name: Force pubspec
+
+      - name: 备份 pubspec + assets
         run: |
-          cp ci-pubspec.yaml pubspec.yaml
-          echo "=== pubspec assets ==="
-          grep -A3 "assets:" pubspec.yaml
-          echo "=== wallpaper 文件 ==="
-          ls -lh assets/wallpaper.jpg
+          cp pubspec.yaml /tmp/ours-pubspec.yaml
+          cp -r assets /tmp/ours-assets
+
+      - run: flutter create --org com.kugou --project-name kugou --platforms=android .
+
+      - name: 恢复 pubspec + assets
+        run: |
+          cp /tmp/ours-pubspec.yaml pubspec.yaml
+          rm -rf assets
+          cp -r /tmp/ours-assets assets
+          echo "=== pubspec assets 段 ==="
+          grep -A5 "assets:" pubspec.yaml
+          echo "=== assets 目录 ==="
+          ls -lh assets/
+
+      - name: 清缓存
+        run: |
+          flutter clean || true
+          rm -rf .dart_tool build
+
       - run: cp android_manifest.xml android/app/src/main/AndroidManifest.xml
       - run: flutter pub get
+
+      - name: 再检查 pubspec
+        run: |
+          echo "=== pub get 后 pubspec assets 段 ==="
+          grep -A5 "assets:" pubspec.yaml
+
       - name: Build
         id: b
         continue-on-error: true
         run: flutter build apk --release 2>&1 | tee /tmp/build.log
+
+      - name: 直接验证 APK 里有没有 wallpaper
+        if: steps.b.outcome == 'success'
+        run: |
+          APK=$(find build -name "*.apk" | head -1)
+          echo "APK: $APK"
+          if unzip -l "$APK" | grep -i wallpaper; then
+            echo "✓✓✓ wallpaper 已打包"
+          else
+            echo "✗✗✗ wallpaper 没打进去！！！"
+            echo "--- pubspec.yaml 全文 ---"
+            cat pubspec.yaml
+            echo "--- assets 目录 ---"
+            ls -laR assets/
+          fi
+
       - if: steps.b.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with: {name: build-error-log, path: /tmp/build.log}
       - if: steps.b.outcome == 'failure'
         run: exit 1
+
       - name: Find APK
         run: |
-          find . -name "*.apk" -type f 2>/dev/null
-          APK=$(find . -name "*.apk" -type f 2>/dev/null | head -1)
+          APK=$(find build -name "*.apk" -type f 2>/dev/null | head -1)
           [ -z "$APK" ] && exit 1
           mkdir -p out && cp "$APK" out/KuGou.apk
+
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
