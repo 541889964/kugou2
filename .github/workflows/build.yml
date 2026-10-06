@@ -13,9 +13,14 @@ jobs:
         with: {distribution: 'zulu', java-version: '17'}
       - uses: subosito/flutter-action@v2
         with: {flutter-version: '3.27.1', channel: 'stable', cache: true}
-      - run: cp pubspec.yaml /tmp/pubspec.bak
       - run: flutter create --org com.kugou --project-name kugou --platforms=android .
-      - run: cp /tmp/pubspec.bak pubspec.yaml
+      - name: Force pubspec
+        run: |
+          cp ci-pubspec.yaml pubspec.yaml
+          echo "=== pubspec assets ==="
+          grep -A3 "assets:" pubspec.yaml
+          echo "=== wallpaper 文件 ==="
+          ls -lh assets/wallpaper.jpg
       - run: cp android_manifest.xml android/app/src/main/AndroidManifest.xml
       - run: flutter pub get
       - name: Build
