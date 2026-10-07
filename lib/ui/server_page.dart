@@ -266,19 +266,8 @@ class _S extends State<ServerPage> {
           trailing: const Icon(Icons.chevron_right),
           onTap: _busy ? null : _showProviderPicker,
         )),
-        if (p.signupUrl.isNotEmpty) Padding(
-          padding: const EdgeInsets.fromLTRB(6, 8, 6, 0),
-          child: InkWell(
-            onTap: () => _openUrl(p.signupUrl),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-              child: Row(children: [
-                const Icon(Icons.open_in_new, size: 14, color: Color(0xFF9C8FD0)),
-                const SizedBox(width: 6),
-                Text('若你没有 ${p.name} 账户，点此${p.signupLabel}',
-                  style: const TextStyle(fontSize: 12,
-                    color: Color(0xFF9C8FD0), decoration: TextDecoration.underline)),
-              ])))),
+        const SizedBox(height: 10),
+        _accountGuide(p),
         const SizedBox(height: 22),
         _label('2 · 填写连接信息'),
         GlassCard(radius: 14, padding: const EdgeInsets.all(16), child: Column(children: [
@@ -392,6 +381,78 @@ class _S extends State<ServerPage> {
             '· 所有凭据同时保存在 /storage/emulated/0/Music/KuGou/server.json，下次启动自动读取。',
             style: TextStyle(fontSize: 11.5, color: Colors.white.withOpacity(0.5), height: 1.9))),
         const SizedBox(height: 32),
+      ]));
+  }
+
+  Widget _accountGuide(ServerProvider p) {
+    // 不需要账号的服务器
+    if (p.signupUrl.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Row(children: [
+          const Icon(Icons.check_circle, size: 15, color: Colors.greenAccent),
+          const SizedBox(width: 8),
+          Text('${p.name} 无需注册，直接上传即可',
+            style: const TextStyle(fontSize: 12, color: Colors.greenAccent)),
+        ]));
+    }
+
+    // 需要账号的服务器
+    final missingFields = p.fields.where((f) => (_extraC[f.key]?.text ?? '').isEmpty).toList();
+    final hasAccount = missingFields.isEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: (hasAccount ? Colors.greenAccent : Colors.orangeAccent).withOpacity(0.10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: (hasAccount ? Colors.greenAccent : Colors.orangeAccent).withOpacity(0.3))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(hasAccount ? Icons.verified_user : Icons.warning_amber_rounded,
+            size: 17,
+            color: hasAccount ? Colors.greenAccent : Colors.orangeAccent),
+          const SizedBox(width: 8),
+          Expanded(child: Text(
+            hasAccount ? '已配置 ${p.name} 账号' : '还没有 ${p.name} 账号？',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700,
+              color: hasAccount ? Colors.greenAccent : Colors.orangeAccent))),
+        ]),
+        const SizedBox(height: 8),
+        Text(
+          hasAccount
+            ? '${p.name} 的 API Key 已填写，可以上传共享。'
+            : '第一步：点下方按钮去浏览器注册账号。第二步：从账号页复制 API Key，回本页填入，即可上传。',
+          style: TextStyle(fontSize: 11.5, color: Colors.white.withOpacity(0.72), height: 1.65)),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              side: BorderSide(color: Colors.white.withOpacity(0.18)),
+              foregroundColor: Colors.white.withOpacity(0.85)),
+            onPressed: () => _openUrl(p.signupUrl),
+            icon: const Icon(Icons.open_in_new, size: 14),
+            label: Text(hasAccount ? '打开 ${p.name}' : '去 ${p.name} 注册',
+              style: const TextStyle(fontSize: 12)))),
+          if (!hasAccount) ...[
+            const SizedBox(width: 8),
+            Expanded(child: FilledButton.icon(
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                backgroundColor: AppTheme.p),
+              onPressed: () {
+                // 滚动到 API Key 输入框
+                FocusScope.of(context).requestFocus(FocusNode());
+                _toast('请在下方「${missingFields.first.label}」输入框粘贴');
+              },
+              icon: const Icon(Icons.keyboard_arrow_down, size: 14),
+              label: const Text('已有账号', style: TextStyle(fontSize: 12)))),
+          ],
+        ]),
       ]));
   }
 
