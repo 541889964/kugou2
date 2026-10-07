@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -11,20 +10,11 @@ Future<bool> showAnnouncement(BuildContext context, {bool force = false}) async 
   if (!force && sp.getInt('announcement_read_v') == kAnnouncementVersion) return true;
   if (!context.mounted) return true;
 
-  final result = await showGeneralDialog<bool>(
+  final result = await showDialog<bool>(
     context: context,
     barrierDismissible: false,
-    barrierLabel: 'agreement',
-    barrierColor: Colors.black.withOpacity(0.65),
-    transitionDuration: const Duration(milliseconds: 380),
-    pageBuilder: (_, __, ___) => const _AgreementDialog(),
-    transitionBuilder: (_, a1, __, child) {
-      final c = CurvedAnimation(parent: a1, curve: Curves.easeOutCubic);
-      return FadeTransition(opacity: c,
-        child: SlideTransition(
-          position: Tween(begin: const Offset(0, 0.06), end: Offset.zero).animate(c),
-          child: child));
-    });
+    builder: (_) => const _AgreementDialog(),
+  );
 
   if (result == true) {
     await sp.setInt('announcement_read_v', kAnnouncementVersion);
@@ -35,111 +25,165 @@ Future<bool> showAnnouncement(BuildContext context, {bool force = false}) async 
 
 class _AgreementDialog extends StatelessWidget {
   const _AgreementDialog();
+
   @override
   Widget build(BuildContext context) {
-    return Center(child: Material(color: Colors.transparent, child: Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 48),
-      constraints: const BoxConstraints(maxWidth: 460, maxHeight: 700),
-      child: ClipRRect(borderRadius: BorderRadius.circular(16),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF14141A).withOpacity(0.96),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withOpacity(0.10))),
-            child: Column(children: [
-              Container(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-                decoration: BoxDecoration(border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.07), width: 1))),
-                child: Row(children: [
-                  Container(width: 34, height: 34,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7C6CB0).withOpacity(0.16),
-                      borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.description_outlined, color: Color(0xFF9C8FD0), size: 18)),
-                  const SizedBox(width: 12),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    const Text(kAnnouncementTitle,
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
-                        color: Colors.white, letterSpacing: 0.2)),
-                    const SizedBox(height: 3),
-                    Text(kAnnouncementVersionLabel,
-                      style: TextStyle(fontSize: 10.5,
-                        color: Colors.white.withOpacity(0.52), letterSpacing: 0.6)),
-                  ])),
-                ])),
-              Expanded(child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  for (int i = 0; i < kAgreementSections.length; i++) ...[
-                    _title(i + 1, kAgreementSections[i]['t']!),
-                    const SizedBox(height: 7),
-                    Text(kAgreementSections[i]['b']!,
-                      style: TextStyle(fontSize: 12.8, color: Colors.white.withOpacity(0.82),
-                        height: 1.85, letterSpacing: 0.25)),
-                    if (i < kAgreementSections.length - 1) const SizedBox(height: 18),
-                  ],
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF7C6CB0).withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: const Color(0xFF7C6CB0).withOpacity(0.24))),
-                    child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Icon(Icons.info_outline, size: 15, color: Color(0xFF9C8FD0)),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text(
-                        '点击「同意并继续」即视为您已完整阅读、充分理解并自愿接受上述全部条款。'
-                        '若您不同意任一条款，请点击「不同意」退出本应用。',
-                        style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.75),
-                          height: 1.7, letterSpacing: 0.2))),
-                    ])),
-                  const SizedBox(height: 16),
-                ]))),
-              Container(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                decoration: BoxDecoration(border: Border(top: BorderSide(color: Colors.white.withOpacity(0.07), width: 1))),
-                child: Row(children: [
-                  Expanded(child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      side: BorderSide(color: Colors.white.withOpacity(0.18), width: 1),
-                      foregroundColor: Colors.white.withOpacity(0.78)),
-                    onPressed: () => Navigator.pop(context, false),
-                    child: const Text('不同意',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.5)))),
-                  const SizedBox(width: 10),
-                  Expanded(flex: 2, child: FilledButton(
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      backgroundColor: const Color(0xFF7C6CB0),
-                      foregroundColor: Colors.white),
-                    onPressed: () => Navigator.pop(context, true),
-                    child: const Text('同意并继续',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.8)))),
-                ])),
-            ])))))
+    return Dialog(
+      backgroundColor: const Color(0xFF14141A),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.white.withOpacity(0.10)),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460, maxHeight: 700),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _header(),
+            Flexible(child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: _body(),
+              ),
+            )),
+            _footer(context),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _header() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.07))),
+      ),
+      child: Row(children: [
+        Container(
+          width: 34, height: 34,
+          decoration: BoxDecoration(
+            color: const Color(0xFF7C6CB0).withOpacity(0.16),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const Icon(Icons.description_outlined,
+            color: Color(0xFF9C8FD0), size: 18),
+        ),
+        const SizedBox(width: 12),
+        Expanded(child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(kAnnouncementTitle,
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
+                color: Colors.white, letterSpacing: 0.2)),
+            const SizedBox(height: 3),
+            Text(kAnnouncementVersionLabel,
+              style: TextStyle(fontSize: 10.5,
+                color: Colors.white.withOpacity(0.52), letterSpacing: 0.6)),
+          ],
+        )),
+      ]),
+    );
+  }
+
+  List<Widget> _body() {
+    final list = <Widget>[];
+    for (int i = 0; i < kAgreementSections.length; i++) {
+      list.add(_title(i + 1, kAgreementSections[i]['t']!));
+      list.add(const SizedBox(height: 7));
+      list.add(Text(
+        kAgreementSections[i]['b']!,
+        style: TextStyle(fontSize: 12.8,
+          color: Colors.white.withOpacity(0.82),
+          height: 1.85, letterSpacing: 0.25),
+      ));
+      if (i < kAgreementSections.length - 1) list.add(const SizedBox(height: 18));
+    }
+    list.add(const SizedBox(height: 8));
+    list.add(Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF7C6CB0).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF7C6CB0).withOpacity(0.24)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, size: 15, color: Color(0xFF9C8FD0)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(
+            '点击「同意并继续」即视为您已完整阅读、充分理解并自愿接受上述全部条款。'
+            '若您不同意任一条款，请点击「不同意」退出本应用。',
+            style: TextStyle(fontSize: 12,
+              color: Colors.white.withOpacity(0.75),
+              height: 1.7, letterSpacing: 0.2),
+          )),
+        ],
+      ),
+    ));
+    list.add(const SizedBox(height: 16));
+    return list;
+  }
+
+  Widget _footer(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      decoration: BoxDecoration(
+        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.07))),
+      ),
+      child: Row(children: [
+        Expanded(child: OutlinedButton(
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            side: BorderSide(color: Colors.white.withOpacity(0.18)),
+            foregroundColor: Colors.white.withOpacity(0.78),
+          ),
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('不同意',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
+        )),
+        const SizedBox(width: 10),
+        Expanded(flex: 2, child: FilledButton(
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 13),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            backgroundColor: const Color(0xFF7C6CB0),
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () => Navigator.pop(context, true),
+          child: const Text('同意并继续',
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
+        )),
+      ]),
     );
   }
 
   Widget _title(int idx, String title) {
-    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Container(width: 20, height: 20, margin: const EdgeInsets.only(top: 1),
-        decoration: BoxDecoration(
-          color: const Color(0xFF7C6CB0).withOpacity(0.15),
-          borderRadius: BorderRadius.circular(5)),
-        child: Center(child: Text('$idx',
-          style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: Color(0xFF9C8FD0))))),
-      const SizedBox(width: 9),
-      Expanded(child: Text(title,
-        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700,
-          color: Colors.white, height: 1.5, letterSpacing: 0.3))),
-    ]);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 20, height: 20,
+          margin: const EdgeInsets.only(top: 1),
+          decoration: BoxDecoration(
+            color: const Color(0xFF7C6CB0).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(5),
+          ),
+          child: Center(child: Text('$idx',
+            style: const TextStyle(fontSize: 10.5,
+              fontWeight: FontWeight.w700, color: Color(0xFF9C8FD0)))),
+        ),
+        const SizedBox(width: 9),
+        Expanded(child: Text(title,
+          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700,
+            color: Colors.white, height: 1.5, letterSpacing: 0.3))),
+      ],
+    );
   }
 }
 
