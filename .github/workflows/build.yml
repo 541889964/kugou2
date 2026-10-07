@@ -35,6 +35,11 @@ jobs:
           rm -rf .dart_tool build
 
       - run: cp android_manifest.xml android/app/src/main/AndroidManifest.xml
+      - name: 覆盖 MainActivity.kt
+        run: |
+          mkdir -p android/app/src/main/kotlin/com/kugou/kugou
+          cp android_native/MainActivity.kt android/app/src/main/kotlin/com/kugou/kugou/MainActivity.kt
+          ls -la android/app/src/main/kotlin/com/kugou/kugou/
       - run: flutter pub get
 
       - name: Build
