@@ -26,4 +26,5 @@ flutter:
   assets:
     - assets/signature.json
     - assets/wallpaper.jpg
+    - assets/wallpapers/
     - assets/icons/
