@@ -126,12 +126,29 @@ class KuGouApi {
 
   /// 歌词：网易云优先 → 酷狗后端兜底
   Future<String?> getLyric(String hash, {int duration = 0, String? songName, String? singer}) async {
-    // 1. 网易云
-    if (songName != null && songName.trim().isNotEmpty) {
-      final nj = await NeteaseApi.getLyric(songName, singer ?? '');
-      if (nj != null && nj.trim().isNotEmpty) return nj;
+    // 1. 概念版（优先）
+    final concept = await _tryLyricFrom(ModeManager.I.isLite ? 'http://127.0.0.1:3000' : 'http://127.0.0.1:3001',
+      hash, duration: duration);
+    if (concept != null) return concept;
+
+    // 2. 普通版（如果当前是概念版，再试普通版）
+    if (ModeManager.I.isLite) {
+      final std = await _tryLyricFrom('http://127.0.0.1:3001', hash, duration: duration);
+      if (std != null) return std;
     }
-    // 2. 酷狗后端
+
+    // 3. 网易云（带歌名+歌手）
+    if (songName != null && songName.trim().isNotEmpty) {
+      try {
+        final nj = await NeteaseApi.getLyric(songName, singer ?? '');
+        if (nj != null && nj.trim().isNotEmpty) return nj;
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  Future<String?> _tryLyricFrom(String base, String hash, {int duration = 0}) async {
     final tries = <Map<String, dynamic>>[
       {'p': '/lyric', 'q': {'hash': hash, 'id': hash, 'duration': duration, 'decode': 'true', 'fmt': 'lrc'}},
       {'p': '/lyric', 'q': {'hash': hash, 'id': hash}},
@@ -139,7 +156,7 @@ class KuGouApi {
     ];
     for (final t in tries) {
       try {
-        final r = await _dio.get('$_base${t['p']}',
+        final r = await _dio.get('$base${t['p']}',
           queryParameters: (t['q'] as Map).map((k, v) => MapEntry(k.toString(), v.toString())),
           options: Options(headers: {'Cookie': _cookie}));
         final data = r.data is String ? _tryJson(r.data as String) : r.data;
