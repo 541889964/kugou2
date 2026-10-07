@@ -19,6 +19,8 @@ class _S extends State<ServerPage> {
   final _importC = TextEditingController();
   final Map<String, TextEditingController> _extraC = {};
   bool _busy = false;
+  bool _pingBusy = false;
+  bool? _remoteOnline;
 
   @override
   void initState() {
@@ -50,6 +52,19 @@ class _S extends State<ServerPage> {
     final m = <String, String>{};
     _extraC.forEach((k, v) { if (v.text.isNotEmpty) m[k] = v.text.trim(); });
     return m;
+  }
+
+  Future<void> _ping() async {
+    setState(() => _pingBusy = true);
+    final ok = await ServerManager.I.pingRemote();
+    setState(() { _pingBusy = false; _remoteOnline = ok; });
+    _toast(ok ? '远程服务器在线' : '远程服务器离线');
+  }
+
+  Future<void> _switchMode(String mode) async {
+    await ServerManager.I.setServerMode(mode);
+    setState(() {});
+    _toast(mode == 'local' ? '已切换到本地后端' : '已切换到远程服务器');
   }
 
   Future<void> _save() async {
@@ -312,7 +327,60 @@ class _S extends State<ServerPage> {
             child: const Text('导入'))),
         ])),
         const SizedBox(height: 22),
-        _label('4 · 使用提示'),
+        _label('4 · 服务器模式'),
+        GlassCard(radius: 14, padding: const EdgeInsets.all(14), child: Column(children: [
+          Row(children: [
+            Expanded(child: _modeBtn('本地后端', Icons.phone_android, 'local', m)),
+            const SizedBox(width: 10),
+            Expanded(child: _modeBtn('远程服务器', Icons.cloud, 'remote', m)),
+          ]),
+          if (m.serverMode == 'remote') ...[
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(child: Text(
+                m.hasRemote ? m.address : '尚未配置远程地址',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11.5,
+                  color: Colors.white.withOpacity(0.6)))),
+              const SizedBox(width: 8),
+              SizedBox(height: 30, child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  side: BorderSide(color: Colors.white.withOpacity(0.18)),
+                  foregroundColor: Colors.white.withOpacity(0.8)),
+                onPressed: _pingBusy ? null : _ping,
+                icon: _pingBusy
+                  ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
+                  : Icon(
+                      _remoteOnline == null ? Icons.network_check
+                      : _remoteOnline! ? Icons.check_circle : Icons.error_outline,
+                      size: 14),
+                label: Text(_remoteOnline == null ? '检测' : (_remoteOnline! ? '在线' : '离线'),
+                  style: const TextStyle(fontSize: 11)))),
+            ]),
+          ],
+          if (m.hasRemote) ...[
+            const SizedBox(height: 10),
+            SizedBox(width: double.infinity, child: TextButton.icon(
+              onPressed: () async {
+                final c = await showDialog<bool>(context: context, builder: (_) => AlertDialog(
+                  backgroundColor: const Color(0xFF17171B),
+                  title: const Text('清空远程配置？'),
+                  content: const Text('将删除本机保存的远程地址、用户名、密码。'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+                    FilledButton(style: FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+                      onPressed: () => Navigator.pop(context, true), child: const Text('删除')),
+                  ]));
+                if (c == true) { await ServerManager.I.clearRemote(); setState(() {}); }
+              },
+              icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent),
+              label: const Text('删除我的远程配置', style: TextStyle(fontSize: 12, color: Colors.redAccent)))),
+          ],
+        ])),
+        const SizedBox(height: 22),
+        _label('5 · 使用提示'),
         Padding(padding: const EdgeInsets.symmetric(horizontal: 6),
           child: Text(
             '· 每个服务器需要填的字段不同。例如 jsonblob / dpaste / npoint 无需注册；'
@@ -325,6 +393,29 @@ class _S extends State<ServerPage> {
             style: TextStyle(fontSize: 11.5, color: Colors.white.withOpacity(0.5), height: 1.9))),
         const SizedBox(height: 32),
       ]));
+  }
+
+  Widget _modeBtn(String title, IconData icon, String mode, ServerManager m) {
+    final active = m.serverMode == mode;
+    return Material(
+      color: active ? AppTheme.p.withOpacity(0.18) : Colors.white.withOpacity(0.04),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: _busy ? null : () => _switchMode(mode),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: active ? AppTheme.p.withOpacity(0.5)
+              : Colors.white.withOpacity(0.08))),
+          child: Column(children: [
+            Icon(icon, size: 20, color: active ? AppTheme.p : Colors.white60),
+            const SizedBox(height: 5),
+            Text(title, style: TextStyle(fontSize: 12,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+              color: active ? Colors.white : Colors.white60)),
+          ]))));
   }
 
   Widget _label(String t) => Padding(

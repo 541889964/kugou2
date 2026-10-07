@@ -10,6 +10,7 @@ import '../mode_manager.dart';
 import '../announcement.dart';
 import '../icon_picker.dart';
 import 'player_page.dart';
+import 'recognize_page.dart';
 import 'playlist_page.dart';
 import 'downloads_page.dart';
 import 'local_music_page.dart';
@@ -170,10 +171,18 @@ class _HP extends State<HomePage> {
                 hintText: '搜索歌曲 / 歌手 / 专辑',
                 hintStyle: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 14),
                 prefixIcon: const Icon(Icons.search, size: 19),
-                suffixIcon: _c.text.isNotEmpty
-                  ? IconButton(icon: const Icon(Icons.close, size: 17),
-                      onPressed: () => setState(() => _c.clear()))
-                  : null,
+                suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+                  if (_c.text.isNotEmpty)
+                    IconButton(icon: const Icon(Icons.close, size: 17),
+                      splashRadius: 18,
+                      onPressed: () => setState(() => _c.clear())),
+                  IconButton(
+                    icon: const Icon(Icons.mic_none, size: 19),
+                    splashRadius: 18,
+                    tooltip: '听歌识曲',
+                    onPressed: () => Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const RecognizePage()))),
+                ]),
                 border: InputBorder.none,
                 fillColor: Colors.transparent,
                 contentPadding: const EdgeInsets.symmetric(vertical: 14)),

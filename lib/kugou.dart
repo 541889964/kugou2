@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'mode_manager.dart';
 import 'signature_manager.dart';
+import 'server_manager.dart';
 
 class Song {
   final String hash, name, singer, album, albumId;
@@ -70,7 +71,10 @@ class KuGouApi {
     connectTimeout: const Duration(seconds: 15),
     receiveTimeout: const Duration(seconds: 20)));
   String? lastError;
-  String get _base => ModeManager.I.backendUrl;
+  String get _base {
+    final local = ModeManager.I.backendUrl;
+    return ServerManager.I.effectiveBaseUrl(localUrl: local);
+  }
   String get _cookie {
     final u = SignatureManager.I.config!['user'] as Map;
     return <String>[

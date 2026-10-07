@@ -4,7 +4,6 @@ import 'dart:math';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 
-/// 每个服务器需要额外填的字段
 class ServerField {
   final String key;
   final String label;
@@ -13,14 +12,13 @@ class ServerField {
   const ServerField({required this.key, required this.label, this.hint = '', this.obscure = false});
 }
 
-/// 一个上传/下载服务
 class ServerProvider {
   final String id;
   final String name;
   final String desc;
-  final String signupUrl;         // 空 = 无需注册
-  final String signupLabel;       // 例如 "注册 jsonbin.io"
-  final List<ServerField> fields; // 需要用户额外填的字段
+  final String signupUrl;
+  final String signupLabel;
+  final List<ServerField> fields;
   const ServerProvider({
     required this.id, required this.name, required this.desc,
     this.signupUrl = '', this.signupLabel = '', this.fields = const []});
@@ -43,17 +41,18 @@ const kProviders = <ServerProvider>[
     id: 'jsonbin', name: 'JSONBin.io',
     desc: '免费账号，10000 次/月请求。数据永久保存。',
     signupUrl: 'https://jsonbin.io/login', signupLabel: '注册 JSONBin.io',
-    fields: [ServerField(key: 'masterKey', label: 'X-Master-Key', hint: '$2b$10$...', obscure: true)],
+    fields: [ServerField(key: 'masterKey', label: 'X-Master-Key',
+      hint: r'$2b$10$...', obscure: true)],
   ),
   ServerProvider(
     id: 'pastebin', name: 'Pastebin',
     desc: '免费账号，可设置过期时间。API Key 在账号页获取。',
     signupUrl: 'https://pastebin.com/signup', signupLabel: '注册 Pastebin',
-    fields: [ServerField(key: 'apiKey', label: 'API Dev Key', hint: '在 https://pastebin.com/doc_api 获取', obscure: true)],
+    fields: [ServerField(key: 'apiKey', label: 'API Dev Key',
+      hint: '在 pastebin.com/doc_api 获取', obscure: true)],
   ),
 ];
 
-/// 加密：base64(XOR(data, key))，前缀 KGv1:
 class ShareCrypto {
   static const _key = 'KuGou-Secure-2025-v1';
   static String encrypt(String plain) {
@@ -64,13 +63,12 @@ class ShareCrypto {
   }
   static String decrypt(String cipher) {
     final s = cipher.trim();
-    if (!s.startsWith('KGv1:')) return s; // 兼容旧明文
+    if (!s.startsWith('KGv1:')) return s;
     final bytes = base64.decode(s.substring(5));
     final out = List<int>.generate(
       bytes.length, (i) => bytes[i] ^ _key.codeUnitAt(i % _key.length));
     return utf8.decode(out);
   }
-  /// 校验是否合法加密串
   static bool isEncrypted(String s) => s.trim().startsWith('KGv1:');
 }
 
@@ -83,6 +81,7 @@ class ServerManager extends ChangeNotifier {
   String _password = '';
   String _shareId = '';
   String _providerId = 'jsonblob';
+  String _serverMode = 'local'; // local / remote
   final Map<String, String> _extraFields = {};
 
   String get address => _address;
@@ -90,8 +89,10 @@ class ServerManager extends ChangeNotifier {
   String get password => _password;
   String get shareId => _shareId;
   String get providerId => _providerId;
+  String get serverMode => _serverMode;
   Map<String, String> get extraFields => Map.unmodifiable(_extraFields);
   bool get configured => _address.isNotEmpty && _username.isNotEmpty;
+  bool get hasRemote => _address.isNotEmpty;
   ServerProvider get provider =>
       kProviders.firstWhere((p) => p.id == _providerId, orElse: () => kProviders[0]);
 
@@ -107,6 +108,7 @@ class ServerManager extends ChangeNotifier {
         _password = (m['password'] ?? '').toString();
         _shareId = (m['shareId'] ?? '').toString();
         _providerId = (m['providerId'] ?? 'jsonblob').toString();
+        _serverMode = (m['serverMode'] ?? 'local').toString();
         final e = m['extraFields'];
         if (e is Map) e.forEach((k, v) => _extraFields[k.toString()] = v.toString());
       }
@@ -130,6 +132,30 @@ class ServerManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setServerMode(String mode) async {
+    _serverMode = mode;
+    await _persist();
+    notifyListeners();
+  }
+
+  /// 实际使用的后端地址
+  String effectiveBaseUrl({String localUrl = 'http://127.0.0.1:3000'}) {
+    if (_serverMode == 'local') return localUrl;
+    return _address.isEmpty ? localUrl : _address;
+  }
+
+  /// 检查远程服务器是否在线
+  Future<bool> pingRemote() async {
+    if (_address.isEmpty) return false;
+    try {
+      final r = await Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 4),
+        receiveTimeout: const Duration(seconds: 4)))
+        .get(_address, options: Options(validateStatus: (_) => true));
+      return r.statusCode != null && r.statusCode! < 500;
+    } catch (_) { return false; }
+  }
+
   Future<void> _persist() async {
     try {
       final f = File(_path);
@@ -138,26 +164,20 @@ class ServerManager extends ChangeNotifier {
       await f.writeAsString(jsonEncode({
         'address': _address, 'username': _username, 'password': _password,
         'shareId': _shareId, 'providerId': _providerId,
+        'serverMode': _serverMode,
         'extraFields': _extraFields,
       }), flush: true);
     } catch (_) {}
   }
 
-  /// 上传到指定服务器，返回 ID
   Future<String> uploadShare() async {
     if (_address.isEmpty || _username.isEmpty) throw Exception('请先填写地址和用户名');
     final p = provider;
-    // 1. 构造明文数据
     final plain = jsonEncode({
-      'version': 1,
-      'address': _address,
-      'username': _username,
-      'password': _password,
-      'uploadedAt': DateTime.now().toIso8601String(),
+      'version': 1, 'address': _address, 'username': _username,
+      'password': _password, 'uploadedAt': DateTime.now().toIso8601String(),
     });
-    // 2. 加密
     final encrypted = ShareCrypto.encrypt(plain);
-
     final dio = Dio(BaseOptions(
       connectTimeout: const Duration(seconds: 12),
       receiveTimeout: const Duration(seconds: 12)));
@@ -167,18 +187,15 @@ class ServerManager extends ChangeNotifier {
       case 'jsonblob':
         final r = await dio.post('https://jsonblob.com/api/jsonBlob',
           data: {'content': encrypted},
-          options: Options(
-            contentType: Headers.jsonContentType,
-            validateStatus: (_) => true,
-            followRedirects: false));
+          options: Options(contentType: Headers.jsonContentType,
+            validateStatus: (_) => true, followRedirects: false));
         final loc = r.headers.value('location') ?? r.headers.value('Location') ?? '';
         id = loc.split('/').last;
         break;
       case 'dpaste':
         final r = await dio.post('https://dpaste.com/api/v2/',
           data: {'content': encrypted, 'expiry_days': '365'},
-          options: Options(
-            contentType: Headers.formUrlEncodedContentType,
+          options: Options(contentType: Headers.formUrlEncodedContentType,
             validateStatus: (_) => true));
         final body = r.data.toString().trim();
         id = body.replaceAll(RegExp(r'[^0-9A-Za-z]'), '');
@@ -187,8 +204,7 @@ class ServerManager extends ChangeNotifier {
       case 'npoint':
         final r = await dio.post('https://api.npoint.io/',
           data: {'content': encrypted},
-          options: Options(
-            contentType: Headers.jsonContentType,
+          options: Options(contentType: Headers.jsonContentType,
             validateStatus: (_) => true));
         final m = r.data is String ? jsonDecode(r.data) : r.data;
         id = (m is Map ? (m['token'] ?? m['id'] ?? '') : '').toString();
@@ -198,8 +214,7 @@ class ServerManager extends ChangeNotifier {
         if (key.isEmpty) throw Exception('请填写 X-Master-Key');
         final r = await dio.post('https://api.jsonbin.io/v3/b',
           data: {'content': encrypted},
-          options: Options(
-            contentType: Headers.jsonContentType,
+          options: Options(contentType: Headers.jsonContentType,
             validateStatus: (_) => true,
             headers: {'X-Master-Key': key, 'X-Bin-Name': 'kugou-server'}));
         final m = r.data is String ? jsonDecode(r.data) : r.data;
@@ -212,8 +227,7 @@ class ServerManager extends ChangeNotifier {
           data: {'api_dev_key': key, 'api_option': 'paste',
             'api_paste_code': encrypted, 'api_paste_private': '1',
             'api_paste_expire_date': 'N'},
-          options: Options(
-            contentType: Headers.formUrlEncodedContentType,
+          options: Options(contentType: Headers.formUrlEncodedContentType,
             validateStatus: (_) => true));
         final body = r.data.toString().trim();
         if (!body.startsWith('http')) throw Exception('上传失败：$body');
@@ -228,15 +242,10 @@ class ServerManager extends ChangeNotifier {
     return id;
   }
 
-  /// 从分享串导入。支持三种格式：
-  /// 1. 纯 ID  —— 用当前选中的服务器
-  /// 2. "providerId:id"  —— 指定服务器
-  /// 3. "KGv1:xxx"  —— 直接是加密配置，跳过网络请求
   Future<void> importShare(String input) async {
     final s = input.trim();
     if (s.isEmpty) throw Exception('输入为空');
 
-    // 情况 3：直接是加密串
     if (ShareCrypto.isEncrypted(s)) {
       final plain = ShareCrypto.decrypt(s);
       final m = jsonDecode(plain) as Map;
@@ -249,7 +258,6 @@ class ServerManager extends ChangeNotifier {
       return;
     }
 
-    // 解析 provider 前缀
     String pid = _providerId;
     String id = s;
     if (s.contains(':')) {
@@ -319,7 +327,6 @@ class ServerManager extends ChangeNotifier {
     if (d is String) return d;
     if (d is Map) {
       if (d['content'] is String) return d['content'];
-      // 递归找
       for (final v in d.values) {
         final r = _extractContent(v);
         if (r != null) return r;
@@ -328,26 +335,29 @@ class ServerManager extends ChangeNotifier {
     return null;
   }
 
-  /// 生成完整分享串（用于离线分享）
   String exportEncrypted() {
     final plain = jsonEncode({
-      'version': 1,
-      'address': _address,
-      'username': _username,
-      'password': _password,
-      'uploadedAt': DateTime.now().toIso8601String(),
+      'version': 1, 'address': _address, 'username': _username,
+      'password': _password, 'uploadedAt': DateTime.now().toIso8601String(),
     });
     return ShareCrypto.encrypt(plain);
   }
 
-  /// 生成服务器标识串（用于告诉别人从哪个服务器读取）
   String exportShareToken() {
     if (_shareId.isEmpty) return '';
     return '$_providerId:$_shareId';
   }
+
+  /// 清空远程配置
+  Future<void> clearRemote() async {
+    _address = ''; _username = ''; _password = ''; _shareId = '';
+    _serverMode = 'local';
+    _extraFields.clear();
+    await _persist();
+    notifyListeners();
+  }
 }
 
-/// 随机 ID 工具（备用）
 String randomId([int len = 12]) {
   const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
   final r = Random();
