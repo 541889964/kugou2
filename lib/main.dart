@@ -3,6 +3,7 @@ import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:provider/provider.dart';
 import 'local_music.dart';
 import 'mode_manager.dart';
+import 'server_manager.dart';
 import 'player.dart';
 import 'playlist.dart';
 import 'downloader.dart';
@@ -72,6 +73,7 @@ void main() async {
     runApp(const _OverlayApp());
     return;
   }
+  await ServerManager.I.init();
   runApp(const KuGouApp());
 }
 
@@ -84,6 +86,7 @@ class KuGouApp extends StatelessWidget {
     ChangeNotifierProvider.value(value: PlaylistService.I),
     ChangeNotifierProvider.value(value: Downloader.I),
     ChangeNotifierProvider.value(value: Updater.I),
+    ChangeNotifierProvider.value(value: ServerManager.I),
     ChangeNotifierProvider.value(value: LocalMusicScanner.I),
   ], child: MaterialApp(title: 'KuGou', debugShowCheckedModeBanner: false,
     theme: AppTheme.dark(),

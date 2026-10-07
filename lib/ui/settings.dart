@@ -9,6 +9,7 @@ import '../local_music.dart';
 import '../mode_manager.dart';
 import '../signature_manager.dart';
 import '../updater.dart';
+import 'server_page.dart';
 import 'theme.dart';
 
 class SettingsPage extends StatefulWidget {
@@ -243,6 +244,21 @@ class _SP extends State<SettingsPage> {
             subtitle: const Text('备用', style: TextStyle(fontSize: 12)),
             trailing: const Icon(Icons.chevron_right),
             onTap: _importing ? null : _manualPath),
+        ]),
+        const SizedBox(height: 22),
+        _s('服务器共享'),
+        _c([
+          ListTile(
+            leading: Container(width: 40, height: 40, decoration: BoxDecoration(
+              color: const Color(0xFF7C6CB0).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.dns_outlined, color: Color(0xFF9C8FD0), size: 22)),
+            title: const Text('服务器配置与共享', style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: const Text('用户名/密码本地保存 · 生成分享 ID 给他人导入',
+              style: TextStyle(fontSize: 11.5)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => const ServerPage()))),
         ]),
         const SizedBox(height: 22),
         _s('后端状态'),

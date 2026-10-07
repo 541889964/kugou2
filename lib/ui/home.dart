@@ -1,10 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../kugou.dart';
 import '../player.dart';
 import '../playlist.dart';
 import '../downloader.dart';
 import '../mode_manager.dart';
+import '../announcement.dart';
 import '../icon_picker.dart';
 import 'player_page.dart';
 import 'playlist_page.dart';
@@ -34,17 +37,22 @@ class _R extends State<RootPage> {
   void initState() {
     super.initState();
     _pc = PageController(initialPage: 0);
-    // 首屏预热：把 27 张图标全部预缓存到 ImageCache，避免首次搜索时卡顿
-    WidgetsBinding.instance.addPostFrameCallback((_) => _warmup());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _boot());
   }
 
-  Future<void> _warmup() async {
+  Future<void> _boot() async {
     if (!mounted) return;
     for (final p in IconPicker.all) {
-      try {
-        if (!mounted) break;
-        await precacheImage(AssetImage(p), context);
-      } catch (_) {}
+      try { if (!mounted) break; await precacheImage(AssetImage(p), context); } catch (_) {}
+    }
+    if (!mounted) return;
+    await Future.delayed(const Duration(milliseconds: 150));
+    if (!mounted) return;
+    final agreed = await showAnnouncement(context);
+    if (!agreed) {
+      SystemNavigator.pop();
+      await Future.delayed(const Duration(milliseconds: 180));
+      exit(0);
     }
   }
 
