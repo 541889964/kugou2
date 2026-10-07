@@ -7,6 +7,7 @@ import '../player.dart';
 import '../playlist.dart';
 import '../downloader.dart';
 import '../floating_lyric.dart';
+import '../icon_picker.dart';
 import 'theme.dart';
 
 class PlayerPage extends StatelessWidget {
@@ -74,7 +75,7 @@ class PlayerPage extends StatelessWidget {
               }),
           ])),
         const Spacer(flex: 2),
-        _RotatingDisc(cover: s.cover, playing: p.playing),
+        _RotatingDisc(song: s, playing: p.playing),
         const SizedBox(height: 36),
         Padding(padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Column(children: [
@@ -218,9 +219,9 @@ class PlayerPage extends StatelessWidget {
 }
 
 class _RotatingDisc extends StatefulWidget {
-  final String? cover;
+  final Song song;
   final bool playing;
-  const _RotatingDisc({this.cover, required this.playing});
+  const _RotatingDisc({required this.song, required this.playing});
   @override
   State<_RotatingDisc> createState() => _RotatingDiscState();
 }
@@ -258,15 +259,26 @@ class _RotatingDiscState extends State<_RotatingDisc> with SingleTickerProviderS
             ]),
             border: Border.all(color: Colors.white.withOpacity(0.08), width: 8)),
           padding: const EdgeInsets.all(30),
-          child: ClipOval(
-            child: widget.cover != null
-              ? CachedNetworkImage(imageUrl: widget.cover!, fit: BoxFit.cover,
-                  errorWidget: (_, __, ___) => _ph())
-              : _ph()))));
+          child: ClipOval(child: _img()))));
   }
-  Widget _ph() => Container(
-    decoration: const BoxDecoration(gradient: AppTheme.discGrad),
-    child: const Icon(Icons.music_note, size: 100, color: Colors.white70));
+  Widget _img() {
+    if (widget.song.cover != null && widget.song.cover!.isNotEmpty) {
+      return CachedNetworkImage(imageUrl: widget.song.cover!, fit: BoxFit.cover,
+        errorWidget: (_, __, ___) => _ph());
+    }
+    return _ph();
+  }
+  Widget _ph() {
+    final p = IconPicker.forHash(widget.song.hash);
+    if (p.isEmpty) {
+      return Container(decoration: const BoxDecoration(gradient: AppTheme.discGrad),
+        child: const Icon(Icons.music_note, size: 100, color: Colors.white70));
+    }
+    return Image.asset(p, fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Container(
+        decoration: const BoxDecoration(gradient: AppTheme.discGrad),
+        child: const Icon(Icons.music_note, size: 100, color: Colors.white70)));
+  }
 }
 
 class _LyricSheet extends StatefulWidget {

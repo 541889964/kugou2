@@ -1,7 +1,7 @@
 name: kugou
 description: KuGou Music App
 publish_to: 'none'
-version: 18.0.0+18
+version: 19.0.0+19
 environment:
   sdk: '>=3.0.0 <4.0.0'
 dependencies:
@@ -25,3 +25,4 @@ flutter:
   assets:
     - assets/signature.json
     - assets/wallpaper.jpg
+    - assets/icons/

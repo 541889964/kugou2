@@ -8,6 +8,7 @@ import 'playlist.dart';
 import 'downloader.dart';
 import 'updater.dart';
 import 'ui/theme.dart';
+import 'ui/glass.dart';
 import 'ui/splash.dart';
 
 @pragma("vm:entry-point")
@@ -82,5 +83,7 @@ class KuGouApp extends StatelessWidget {
     ChangeNotifierProvider.value(value: Updater.I),
     ChangeNotifierProvider.value(value: LocalMusicScanner.I),
   ], child: MaterialApp(title: 'KuGou', debugShowCheckedModeBanner: false,
-    theme: AppTheme.dark(), home: const SplashPage()));
+    theme: AppTheme.dark(),
+    builder: (context, child) => AppBackground(child: child),
+    home: const SplashPage()));
 }

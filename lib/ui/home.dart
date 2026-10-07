@@ -6,12 +6,14 @@ import '../player.dart';
 import '../playlist.dart';
 import '../downloader.dart';
 import '../mode_manager.dart';
+import '../icon_picker.dart';
 import 'player_page.dart';
 import 'playlist_page.dart';
 import 'downloads_page.dart';
 import 'local_music_page.dart';
 import 'settings.dart';
 import 'theme.dart';
+import 'glass.dart';
 
 class RootPage extends StatefulWidget {
   const RootPage({super.key});
@@ -20,16 +22,31 @@ class RootPage extends StatefulWidget {
 }
 class _R extends State<RootPage> {
   int _t = 0;
+  static const _pages = <Widget>[
+    HomePage(), LocalMusicPage(), PlaylistPage(), DownloadsPage(), SettingsPage(),
+  ];
   @override
   Widget build(BuildContext context) {
     final p = context.watch<PlayerService>();
     return Scaffold(
-      body: IndexedStack(index: _t, children: const [
-        HomePage(), LocalMusicPage(), PlaylistPage(), DownloadsPage(), SettingsPage(),
-      ]),
+      backgroundColor: Colors.transparent,
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 340),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, anim) {
+          final offset = Tween<Offset>(begin: const Offset(0.10, 0), end: Offset.zero)
+              .animate(CurvedAnimation(parent: anim, curve: Curves.easeOutCubic));
+          return FadeTransition(opacity: anim,
+            child: SlideTransition(position: offset, child: child));
+        },
+        child: KeyedSubtree(key: ValueKey(_t), child: _pages[_t]),
+      ),
       bottomNavigationBar: Column(mainAxisSize: MainAxisSize.min, children: [
         if (p.current != null) const _Mini(),
         NavigationBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
           selectedIndex: _t,
           onDestinationSelected: (i) => setState(() => _t = i),
           destinations: const [
@@ -53,6 +70,7 @@ class _HP extends State<HomePage> {
   List<Song> _l = [];
   bool _loading = false;
   String _kw = '';
+
   Future<void> _s() async {
     final kw = _c.text.trim();
     if (kw.isEmpty) return;
@@ -61,31 +79,27 @@ class _HP extends State<HomePage> {
     final r = await KuGouApi.I.search(kw);
     if (!mounted) return;
     setState(() { _l = r; _loading = false; });
-    // 扫描已下载状态
     Downloader.I.scanDownloaded(r);
     if (r.isEmpty && KuGouApi.I.lastError != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(KuGouApi.I.lastError!)));
     }
   }
+
   @override
   Widget build(BuildContext context) {
     final m = context.watch<ModeManager>();
-    return Scaffold(body: Stack(children: [
-      // 壁纸背景
-      Positioned.fill(child: Image.asset('assets/wallpaper.jpg',
-        fit: BoxFit.cover, opacity: const AlwaysStoppedAnimation(0.18),
-        errorBuilder: (_, __, ___) => const SizedBox())),
-      Positioned.fill(child: Container(color: Colors.black.withOpacity(0.55))),
-      SafeArea(child: Column(children: [
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: SafeArea(child: Column(children: [
         Container(
           margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             gradient: LinearGradient(colors: [
-              (m.isLite ? AppTheme.p : AppTheme.s).withOpacity(0.25),
-              (m.isLite ? AppTheme.p : AppTheme.s).withOpacity(0.08)]),
+              (m.isLite ? AppTheme.p : AppTheme.s).withOpacity(0.28),
+              (m.isLite ? AppTheme.p : AppTheme.s).withOpacity(0.06)]),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: (m.isLite ? AppTheme.p : AppTheme.s).withOpacity(0.4))),
+            border: Border.all(color: (m.isLite ? AppTheme.p : AppTheme.s).withOpacity(0.45))),
           child: Row(children: [
             Icon(m.isLite ? Icons.diamond : Icons.music_note, size: 16,
               color: m.isLite ? AppTheme.p : AppTheme.s),
@@ -94,97 +108,117 @@ class _HP extends State<HomePage> {
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
                 color: m.isLite ? AppTheme.p : AppTheme.s)),
             const Spacer(),
-            Text('端口 ${m.port}', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.5))),
+            Text('端口 ${m.port}', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.65))),
           ])),
         Padding(padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-          child: TextField(controller: _c, onSubmitted: (_) => _s(),
-            textInputAction: TextInputAction.search,
-            decoration: InputDecoration(
-              hintText: '搜索歌曲 / 歌手 / 专辑',
-              prefixIcon: const Icon(Icons.search, size: 20),
-              suffixIcon: _c.text.isNotEmpty
-                ? IconButton(icon: const Icon(Icons.close, size: 18),
-                    onPressed: () => setState(() => _c.clear()))
-                : null),
-            onChanged: (_) => setState(() {}))),
+          child: GlassCard(
+            radius: 28,
+            padding: EdgeInsets.zero,
+            child: TextField(controller: _c, onSubmitted: (_) => _s(),
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: '搜索歌曲 / 歌手 / 专辑',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _c.text.isNotEmpty
+                  ? IconButton(icon: const Icon(Icons.close, size: 18),
+                      onPressed: () => setState(() => _c.clear()))
+                  : null,
+                border: InputBorder.none,
+                fillColor: Colors.transparent),
+              onChanged: (_) => setState(() {})))),
         Expanded(child: _body()),
       ])),
-    ]));
+    );
   }
+
   Widget _body() {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_kw.isEmpty) {
       return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         Container(padding: const EdgeInsets.all(30),
           decoration: BoxDecoration(shape: BoxShape.circle,
-            gradient: AppTheme.grad.withOpacity(0.3),
-            boxShadow: [BoxShadow(color: AppTheme.p.withOpacity(0.4), blurRadius: 50, spreadRadius: 6)]),
-          child: Icon(Icons.headphones, size: 68, color: Colors.white.withOpacity(0.9))),
+            gradient: AppTheme.grad.withOpacity(0.35),
+            boxShadow: [BoxShadow(color: AppTheme.p.withOpacity(0.5), blurRadius: 60, spreadRadius: 8)]),
+          child: Icon(Icons.headphones, size: 68, color: Colors.white.withOpacity(0.95))),
         const SizedBox(height: 26),
         Text('开始你的音乐之旅', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600,
-          color: Colors.white.withOpacity(0.85))),
+          color: Colors.white.withOpacity(0.9))),
         const SizedBox(height: 8),
-        Text('搜索在线音乐，或去「本地」听歌', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.5))),
+        Text('搜索在线音乐，或去「本地」听歌', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.55))),
       ]));
     }
     if (_l.isEmpty) return Center(child: Text('没有找到结果',
-      style: TextStyle(color: Colors.white.withOpacity(0.5))));
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      itemCount: _l.length,
-      itemBuilder: (_, i) => _card(_l[i]));
+      style: TextStyle(color: Colors.white.withOpacity(0.6))));
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Padding(padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
+        child: Text('找到 ${_l.length} 首',
+          style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.6), letterSpacing: 0.5))),
+      Expanded(child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        itemCount: _l.length,
+        itemBuilder: (_, i) => _card(_l[i]))),
+    ]);
   }
-  Widget _card(Song s) => Container(
+
+  Widget _card(Song s) => GlassCard(
     margin: const EdgeInsets.symmetric(vertical: 4),
-    decoration: BoxDecoration(color: AppTheme.surface.withOpacity(0.85),
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: Colors.white.withOpacity(0.06)),
-      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.35), blurRadius: 8, offset: const Offset(0, 2))]),
-    child: Material(color: Colors.transparent, borderRadius: BorderRadius.circular(16),
-      child: InkWell(borderRadius: BorderRadius.circular(16),
-        onTap: () {
-          PlayerService.I.playSong(s, list: _l);
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerPage()));
-        },
-        child: Padding(padding: const EdgeInsets.all(10),
-          child: Row(children: [
-            _cover(s.cover, 52),
-            const SizedBox(width: 12),
-            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w500)),
-              const SizedBox(height: 3),
-              Text(s.singer, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.5))),
-            ])),
-            Consumer<Downloader>(builder: (_, dl, __) {
-              final t = dl.tasks[s.hash];
-              if (t != null) {
-                if (t.status == 'done') return const Icon(Icons.check_circle, color: Colors.greenAccent, size: 22);
-                if (t.status == 'failed') return IconButton(
-                  icon: const Icon(Icons.refresh, color: Colors.redAccent, size: 20),
-                  onPressed: () => dl.download(s));
-                return Padding(padding: const EdgeInsets.all(10),
-                  child: SizedBox(width: 20, height: 20,
-                    child: CircularProgressIndicator(value: t.progress > 0 ? t.progress : null, strokeWidth: 2)));
-              }
-              return IconButton(icon: Icon(Icons.download_outlined,
-                color: Colors.white.withOpacity(0.5), size: 20), onPressed: () => dl.download(s));
-            }),
-            Consumer<PlaylistService>(builder: (_, pl, __) {
-              final fav = pl.contains(s);
-              return IconButton(icon: Icon(fav ? Icons.favorite : Icons.favorite_border,
-                color: fav ? Colors.redAccent : Colors.white38, size: 20),
-                onPressed: () => pl.toggle(s));
-            }),
-          ])))));
-  Widget _cover(String? u, double s) => Container(width: s, height: s,
-    decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), color: AppTheme.surfaceHigh),
-    child: ClipRRect(borderRadius: BorderRadius.circular(12),
-      child: u != null
-        ? CachedNetworkImage(imageUrl: u, fit: BoxFit.cover,
-            errorWidget: (_, __, ___) => Icon(Icons.music_note, color: Colors.white.withOpacity(0.2), size: s * 0.5))
-        : Icon(Icons.music_note, color: Colors.white.withOpacity(0.2), size: s * 0.5)));
+    padding: const EdgeInsets.all(10),
+    onTap: () {
+      PlayerService.I.playSong(s, list: _l);
+      Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerPage()));
+    },
+    child: Row(children: [
+      _cover(s, 52),
+      const SizedBox(width: 12),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600, color: Colors.white)),
+        const SizedBox(height: 3),
+        Text(s.singer, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.6))),
+      ])),
+      Consumer<Downloader>(builder: (_, dl, __) {
+        final t = dl.tasks[s.hash];
+        if (t != null) {
+          if (t.status == 'done') return const Icon(Icons.check_circle, color: Colors.greenAccent, size: 22);
+          if (t.status == 'failed') return IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.redAccent, size: 20),
+            onPressed: () => dl.download(s));
+          return Padding(padding: const EdgeInsets.all(10),
+            child: SizedBox(width: 20, height: 20,
+              child: CircularProgressIndicator(value: t.progress > 0 ? t.progress : null, strokeWidth: 2)));
+        }
+        return IconButton(icon: Icon(Icons.download_outlined,
+          color: Colors.white.withOpacity(0.65), size: 20), onPressed: () => dl.download(s));
+      }),
+      Consumer<PlaylistService>(builder: (_, pl, __) {
+        final fav = pl.contains(s);
+        return IconButton(icon: Icon(fav ? Icons.favorite : Icons.favorite_border,
+          color: fav ? Colors.redAccent : Colors.white54, size: 20),
+          onPressed: () => pl.toggle(s));
+      }),
+    ]));
+
+  Widget _cover(Song s, double size) {
+    final Widget inner;
+    if (s.cover != null && s.cover!.isNotEmpty) {
+      inner = CachedNetworkImage(imageUrl: s.cover!, fit: BoxFit.cover,
+        errorWidget: (_, __, ___) => _icon(s));
+    } else {
+      inner = _icon(s);
+    }
+    return Container(width: size, height: size,
+      decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
+      child: ClipRRect(borderRadius: BorderRadius.circular(12), child: inner));
+  }
+  Widget _icon(Song s) {
+    final p = IconPicker.forHash(s.hash);
+    if (p.isEmpty) return Container(decoration: const BoxDecoration(gradient: AppTheme.discGrad),
+      child: const Icon(Icons.music_note, color: Colors.white70));
+    return Image.asset(p, fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Container(decoration: const BoxDecoration(gradient: AppTheme.discGrad),
+        child: const Icon(Icons.music_note, color: Colors.white70)));
+  }
 }
 
 class _Mini extends StatelessWidget {
@@ -199,44 +233,50 @@ class _Mini extends StatelessWidget {
     final prog = dur > 0 ? cur / dur : 0.0;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: AppTheme.surfaceHigh, borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.35), blurRadius: 14, offset: const Offset(0, -2))]),
-      child: Material(color: Colors.transparent, borderRadius: BorderRadius.circular(16),
-        child: InkWell(borderRadius: BorderRadius.circular(16),
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerPage())),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            SizedBox(height: 60, child: Row(children: [
-              const SizedBox(width: 10),
-              Container(width: 44, height: 44,
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(10), color: AppTheme.surface),
-                child: ClipRRect(borderRadius: BorderRadius.circular(10),
-                  child: s.cover != null
-                    ? CachedNetworkImage(imageUrl: s.cover!, fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => const Icon(Icons.music_note))
-                    : const Icon(Icons.music_note, size: 20))),
-              const SizedBox(width: 12),
-              Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
-                Text(s.singer, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 11.5, color: Colors.white.withOpacity(0.5))),
-              ])),
-              if (p.loading)
-                const Padding(padding: EdgeInsets.all(12),
-                  child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
-              else IconButton(onPressed: p.toggle, iconSize: 24,
-                icon: Icon(p.playing ? Icons.pause_circle_filled : Icons.play_circle_filled)),
-              IconButton(onPressed: p.next, iconSize: 24, icon: const Icon(Icons.skip_next)),
-              const SizedBox(width: 4),
+      child: GlassCard(
+        radius: 18,
+        padding: EdgeInsets.zero,
+        opacity: 0.16,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          SizedBox(height: 60, child: Row(children: [
+            const SizedBox(width: 10),
+            Container(width: 44, height: 44,
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
+              child: ClipRRect(borderRadius: BorderRadius.circular(10),
+                child: s.cover != null
+                  ? CachedNetworkImage(imageUrl: s.cover!, fit: BoxFit.cover,
+                      errorWidget: (_, __, ___) => _miniIcon(s))
+                  : _miniIcon(s))),
+            const SizedBox(width: 12),
+            Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+              Text(s.singer, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11.5, color: Colors.white.withOpacity(0.6))),
             ])),
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(16), bottomRight: Radius.circular(16)),
-              child: LinearProgressIndicator(value: prog, minHeight: 3,
-                backgroundColor: Colors.white10,
-                valueColor: const AlwaysStoppedAnimation(AppTheme.p))),
-          ]))));
+            if (p.loading)
+              const Padding(padding: EdgeInsets.all(12),
+                child: SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)))
+            else IconButton(onPressed: p.toggle, iconSize: 26,
+              icon: Icon(p.playing ? Icons.pause_circle_filled : Icons.play_circle_filled,
+                color: Colors.white)),
+            IconButton(onPressed: p.next, iconSize: 26,
+              icon: const Icon(Icons.skip_next, color: Colors.white)),
+            const SizedBox(width: 4),
+          ])),
+          ClipRRect(
+            borderRadius: const BorderRadius.only(
+              bottomLeft: Radius.circular(18), bottomRight: Radius.circular(18)),
+            child: LinearProgressIndicator(value: prog, minHeight: 3,
+              backgroundColor: Colors.white12,
+              valueColor: const AlwaysStoppedAnimation(AppTheme.p))),
+        ])));
+  }
+  Widget _miniIcon(Song s) {
+    final p = IconPicker.forHash(s.hash);
+    if (p.isEmpty) return const Icon(Icons.music_note, color: Colors.white70);
+    return Image.asset(p, fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white70));
   }
 }
