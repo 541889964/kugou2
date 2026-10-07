@@ -34,7 +34,20 @@ class _R extends State<RootPage> {
   void initState() {
     super.initState();
     _pc = PageController(initialPage: 0);
+    // 首屏预热：把 27 张图标全部预缓存到 ImageCache，避免首次搜索时卡顿
+    WidgetsBinding.instance.addPostFrameCallback((_) => _warmup());
   }
+
+  Future<void> _warmup() async {
+    if (!mounted) return;
+    for (final p in IconPicker.all) {
+      try {
+        if (!mounted) break;
+        await precacheImage(AssetImage(p), context);
+      } catch (_) {}
+    }
+  }
+
   @override
   void dispose() { _pc.dispose(); super.dispose(); }
 
@@ -59,7 +72,11 @@ class _R extends State<RootPage> {
           onDestinationSelected: (i) {
             if (i == _t) return;
             setState(() => _t = i);
-            _pc.jumpToPage(i);
+            _pc.animateToPage(
+              i,
+              duration: const Duration(milliseconds: 320),
+              curve: Curves.easeOutCubic,
+            );
           },
           destinations: const [
             NavigationDestination(icon: Icon(Icons.search_outlined, size: 22), selectedIcon: Icon(Icons.search, size: 22), label: '搜索'),

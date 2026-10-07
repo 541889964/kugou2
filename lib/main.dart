@@ -63,6 +63,9 @@ class _OA extends State<_OverlayApp> {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 加大图片缓存，避免每次重建都重新解码
+  PaintingBinding.instance.imageCache.maximumSize = 400;
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 96 << 20;
   bool isOverlay = false;
   try { isOverlay = await FlutterOverlayWindow.isActive(); } catch (_) {}
   if (isOverlay) {

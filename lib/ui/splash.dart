@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../mode_manager.dart';
 import '../playlist.dart';
 import '../signature_manager.dart';
@@ -68,7 +70,13 @@ class _S extends State<SplashPage> with SingleTickerProviderStateMixin {
 
     await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
-    showAnnouncement(context);
+    final agreed = await showAnnouncement(context);
+    if (!agreed) {
+      // 用户不同意 → 直接退出应用
+      SystemNavigator.pop();
+      await Future.delayed(const Duration(milliseconds: 200));
+      exit(0);
+    }
   }
 
   @override

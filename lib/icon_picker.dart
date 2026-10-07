@@ -30,6 +30,8 @@ class IconPicker {
     'assets/icons/icon_27.png',
   ];
 
+  static List<String> get all => List.unmodifiable(_all);
+
   static String forHash(String hash) {
     if (_all.isEmpty) return '';
     int h = 0;
