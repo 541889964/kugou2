@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import '../kugou.dart';
 import '../player.dart';
 import '../playlist.dart';
@@ -114,7 +113,9 @@ class _HP extends State<HomePage> {
           child: GlassCard(
             radius: 28,
             padding: EdgeInsets.zero,
-            child: TextField(controller: _c, onSubmitted: (_) => _s(),
+            child: TextField(
+              controller: _c,
+              onSubmitted: (_) => _s(),
               textInputAction: TextInputAction.search,
               decoration: InputDecoration(
                 hintText: '搜索歌曲 / 歌手 / 专辑',
@@ -202,14 +203,19 @@ class _HP extends State<HomePage> {
   Widget _cover(Song s, double size) {
     return Container(width: size, height: size,
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
-      child: ClipRRect(borderRadius: BorderRadius.circular(12), child: _icon(s)));
+      child: ClipRRect(borderRadius: BorderRadius.circular(12),
+        child: _iconFor(s.hash)));
   }
-  Widget _icon(Song s) {
-    final p = IconPicker.forHash(s.hash);
-    if (p.isEmpty) return Container(decoration: const BoxDecoration(gradient: AppTheme.discGrad),
-      child: const Icon(Icons.music_note, color: Colors.white70));
+
+  Widget _iconFor(String hash) {
+    final p = IconPicker.forHash(hash);
+    if (p.isEmpty) {
+      return Container(decoration: const BoxDecoration(gradient: AppTheme.discGrad),
+        child: const Icon(Icons.music_note, color: Colors.white70));
+    }
     return Image.asset(p, fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(decoration: const BoxDecoration(gradient: AppTheme.discGrad),
+      errorBuilder: (_, __, ___) => Container(
+        decoration: const BoxDecoration(gradient: AppTheme.discGrad),
         child: const Icon(Icons.music_note, color: Colors.white70)));
   }
 }
@@ -236,7 +242,7 @@ class _Mini extends StatelessWidget {
             Container(width: 44, height: 44,
               decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
               child: ClipRRect(borderRadius: BorderRadius.circular(10),
-                child: _miniIcon(s)),
+                child: _miniIcon(s.hash))),
             const SizedBox(width: 12),
             Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -263,8 +269,9 @@ class _Mini extends StatelessWidget {
               valueColor: const AlwaysStoppedAnimation(AppTheme.p))),
         ])));
   }
-  Widget _miniIcon(Song s) {
-    final p = IconPicker.forHash(s.hash);
+
+  Widget _miniIcon(String hash) {
+    final p = IconPicker.forHash(hash);
     if (p.isEmpty) return const Icon(Icons.music_note, color: Colors.white70);
     return Image.asset(p, fit: BoxFit.cover,
       errorBuilder: (_, __, ___) => const Icon(Icons.music_note, color: Colors.white70));
