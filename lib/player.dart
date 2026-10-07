@@ -33,14 +33,19 @@ class PlayerService extends ChangeNotifier {
 
   PlayerService._() {
     // 关键修复：用 Timer 每 200ms 轮询，不依赖 stream，100% 能触发
-    _ticker = Timer.periodic(const Duration(milliseconds: 200), (_) => _tick());
+    _ticker = Timer.periodic(const Duration(milliseconds: 250), (_) => _tick());
     // 流只用来快速响应 playing 变化
     player.playerStateStream.listen((_) => notifyListeners());
   }
 
   void _tick() {
-    _pos = player.position;
-    _dur = player.duration ?? Duration.zero;
+    final newPos = player.position;
+    final newDur = player.duration ?? Duration.zero;
+    final posChanged = (newPos - _pos).abs() > const Duration(milliseconds: 90);
+    final durChanged = newDur != _dur;
+    if (!posChanged && !durChanged) return;
+    _pos = newPos;
+    _dur = newDur;
     _updateLyric();
     _checkComplete();
     notifyListeners();

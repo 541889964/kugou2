@@ -10,6 +10,9 @@ class AppTheme {
     final sc = ColorScheme.fromSeed(seedColor: p, brightness: Brightness.dark, surface: surface);
     return ThemeData(
       useMaterial3: true,
+      pageTransitionsTheme: const PageTransitionsTheme(builders: {
+        TargetPlatform.android: FadeUpwardsPageTransitionsBuilder(),
+      }),
       colorScheme: sc,
       scaffoldBackgroundColor: Colors.transparent,
       appBarTheme: const AppBarTheme(
