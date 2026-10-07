@@ -200,16 +200,9 @@ class _HP extends State<HomePage> {
     ]));
 
   Widget _cover(Song s, double size) {
-    final Widget inner;
-    if (s.cover != null && s.cover!.isNotEmpty) {
-      inner = CachedNetworkImage(imageUrl: s.cover!, fit: BoxFit.cover,
-        errorWidget: (_, __, ___) => _icon(s));
-    } else {
-      inner = _icon(s);
-    }
     return Container(width: size, height: size,
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(12)),
-      child: ClipRRect(borderRadius: BorderRadius.circular(12), child: inner));
+      child: ClipRRect(borderRadius: BorderRadius.circular(12), child: _icon(s)));
   }
   Widget _icon(Song s) {
     final p = IconPicker.forHash(s.hash);
@@ -243,10 +236,7 @@ class _Mini extends StatelessWidget {
             Container(width: 44, height: 44,
               decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
               child: ClipRRect(borderRadius: BorderRadius.circular(10),
-                child: s.cover != null
-                  ? CachedNetworkImage(imageUrl: s.cover!, fit: BoxFit.cover,
-                      errorWidget: (_, __, ___) => _miniIcon(s))
-                  : _miniIcon(s))),
+                child: _miniIcon(s)),
             const SizedBox(width: 12),
             Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start, children: [

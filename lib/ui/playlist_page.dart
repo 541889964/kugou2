@@ -62,15 +62,8 @@ class PlaylistPage extends StatelessWidget {
           }));
   }
   Widget _cover(dynamic s, double size) {
-    final Widget inner;
-    if (s.cover != null && s.cover!.isNotEmpty) {
-      inner = CachedNetworkImage(imageUrl: s.cover!, fit: BoxFit.cover,
-        errorWidget: (_, __, ___) => _icon(s));
-    } else {
-      inner = _icon(s);
-    }
     return SizedBox(width: size, height: size,
-      child: ClipRRect(borderRadius: BorderRadius.circular(10), child: inner));
+      child: ClipRRect(borderRadius: BorderRadius.circular(10), child: _icon(s)));
   }
   Widget _icon(dynamic s) {
     final p = IconPicker.forHash(s.hash);

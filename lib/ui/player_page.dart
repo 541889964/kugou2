@@ -3,6 +3,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../kugou.dart';
 import '../player.dart';
 import '../playlist.dart';
 import '../downloader.dart';
@@ -262,10 +263,7 @@ class _RotatingDiscState extends State<_RotatingDisc> with SingleTickerProviderS
           child: ClipOval(child: _img()))));
   }
   Widget _img() {
-    if (widget.song.cover != null && widget.song.cover!.isNotEmpty) {
-      return CachedNetworkImage(imageUrl: widget.song.cover!, fit: BoxFit.cover,
-        errorWidget: (_, __, ___) => _ph());
-    }
+    // 只用本地随机图标，不加载网络封面
     return _ph();
   }
   Widget _ph() {
