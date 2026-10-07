@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../server_manager.dart';
+import '../mode_manager.dart';
 import 'theme.dart';
 import 'glass.dart';
 
@@ -26,7 +27,7 @@ class _S extends State<ServerPage> {
   void initState() {
     super.initState();
     final m = ServerManager.I;
-    _addrC.text = m.address;
+    _addrC.text = m.address.isEmpty ? ModeManager.I.backendUrl : m.address;
     _userC.text = m.username;
     _passC.text = m.password;
     for (final f in m.provider.fields) {
@@ -271,11 +272,17 @@ class _S extends State<ServerPage> {
         const SizedBox(height: 22),
         _label('2 · 填写连接信息'),
         GlassCard(radius: 14, padding: const EdgeInsets.all(16), child: Column(children: [
-          _field('后端地址', _addrC, hint: 'http://192.168.1.100:3000'),
+          _field('后端地址', _addrC, hint: 'http://127.0.0.1:3000'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 6, 4, 0),
+            child: Text(
+              '提示：这是你部署 KuGouMusicApi 的后端地址。'
+              '如果你没自己部署，用默认的 127.0.0.1:3000 就行。',
+              style: TextStyle(fontSize: 10.5, color: Colors.white.withOpacity(0.5), height: 1.6))),
           const SizedBox(height: 12),
-          _field('用户名', _userC, hint: 'your-username'),
+          _field('用户名（可选）', _userC, hint: '留空即可'),
           const SizedBox(height: 12),
-          _field('密码', _passC, hint: '••••••', obscure: true),
+          _field('密码（可选）', _passC, hint: '留空即可', obscure: true),
           for (final f in p.fields) ...[
             const SizedBox(height: 12),
             _field(f.label, _extraC[f.key]!, hint: f.hint, obscure: f.obscure),

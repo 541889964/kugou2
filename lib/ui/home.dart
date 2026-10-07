@@ -328,6 +328,8 @@ class _Mini extends StatelessWidget {
         radius: 16,
         padding: EdgeInsets.zero,
         heavy: true,
+        onTap: () => Navigator.push(context,
+          MaterialPageRoute(builder: (_) => const PlayerPage())),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           SizedBox(height: 58, child: Row(children: [
             const SizedBox(width: 10),
