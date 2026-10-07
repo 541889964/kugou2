@@ -116,7 +116,17 @@ class PlayerService extends ChangeNotifier {
     if (ni != currentLyricIndex) currentLyricIndex = ni;
   }
 
+  bool _isCurrentPlaying(Song s) {
+    if (current == null || current!.hash != s.hash) return false;
+    if (player.processingState == ProcessingState.completed) return false;
+    return true;
+  }
+
   Future<void> playSong(Song s, {List<Song>? list}) async {
+    if (_isCurrentPlaying(s)) {
+      if (!player.playing) await player.play();
+      return;
+    }
     loading = true; errorMsg = null; lyric = null; lyricLines = [];
     currentLyricIndex = 0; notifyListeners();
     if (list != null) {
@@ -131,6 +141,10 @@ class PlayerService extends ChangeNotifier {
   }
 
   Future<void> playFromList(Song s, List<Song> list, {int? i}) async {
+    if (_isCurrentPlaying(s)) {
+      if (!player.playing) await player.play();
+      return;
+    }
     loading = true; errorMsg = null; lyric = null; lyricLines = [];
     currentLyricIndex = 0; notifyListeners();
     queue.clear(); queue.addAll(list);

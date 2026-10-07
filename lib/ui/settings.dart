@@ -8,6 +8,7 @@ import '../har_parser.dart';
 import '../local_music.dart';
 import '../mode_manager.dart';
 import '../signature_manager.dart';
+import '../search_settings.dart';
 import '../updater.dart';
 import 'server_page.dart';
 import 'theme.dart';
@@ -339,6 +340,26 @@ class _SP extends State<SettingsPage> {
               style: const TextStyle(fontSize: 12)),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => LocalMusicScanner.I.scan()),
+        ]),
+        const SizedBox(height: 22),
+        _s('搜索'),
+        _c([
+          ListTile(
+            leading: Container(width: 40, height: 40, decoration: BoxDecoration(
+              color: const Color(0xFF7C6CB0).withOpacity(0.15),
+              borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.tune, color: Color(0xFF9C8FD0), size: 22)),
+            title: const Text('每次搜索返回数量', style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text('当前 ${SearchSettings.I.pageSize} 首', style: const TextStyle(fontSize: 12)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Slider(
+              value: SearchSettings.I.pageSize.toDouble(),
+              min: 10, max: 100, divisions: 18,
+              label: '${SearchSettings.I.pageSize}',
+              onChanged: (v) => SearchSettings.I.setPageSize(v.toInt()),
+            )),
         ]),
         const SizedBox(height: 22),
         _s('播放模式'),

@@ -67,7 +67,7 @@ class _R extends State<RootPage> {
       backgroundColor: Colors.transparent,
       body: PageView(
         controller: _pc,
-        physics: const NeverScrollableScrollPhysics(),
+        onPageChanged: (i) => setState(() => _t = i),
         allowImplicitScrolling: true,
         children: _pages,
       ),
@@ -103,7 +103,9 @@ class HomePage extends StatefulWidget {
   @override
   State<HomePage> createState() => _HP();
 }
-class _HP extends State<HomePage> {
+class _HP extends State<HomePage> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
   final _c = TextEditingController();
   final _scroll = ScrollController();
   List<Song> _l = [];
@@ -133,6 +135,7 @@ class _HP extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final m = context.watch<ModeManager>();
     return Scaffold(
       backgroundColor: Colors.transparent,

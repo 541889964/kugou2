@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'mode_manager.dart';
+import 'search_settings.dart';
 import 'signature_manager.dart';
 import 'server_manager.dart';
 
@@ -88,11 +89,12 @@ class KuGouApi {
     ].join('; ');
   }
 
-  Future<List<Song>> search(String kw, {int page = 1, int pagesize = 30}) async {
+  Future<List<Song>> search(String kw, {int page = 1, int? pagesize}) async {
+    final size = pagesize ?? SearchSettings.I.pageSize;
     lastError = null;
     try {
       final r = await _dio.get('$_base/search',
-        queryParameters: {'keywords': kw, 'type': 'song', 'page': page, 'pagesize': pagesize},
+        queryParameters: {'keywords': kw, 'type': 'song', 'page': page, 'pagesize': size},
         options: Options(headers: {'Cookie': _cookie}));
       final d = r.data is String ? jsonDecode(r.data) : r.data;
       final lists = (d['data']?['lists'] ?? d['data']?['info'] ?? []) as List;

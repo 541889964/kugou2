@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'local_music.dart';
 import 'mode_manager.dart';
 import 'server_manager.dart';
+import 'search_settings.dart';
 import 'music_recognition.dart';
 import 'player.dart';
 import 'playlist.dart';
@@ -75,6 +76,7 @@ void main() async {
     return;
   }
   await ServerManager.I.init();
+  await SearchSettings.I.init();
   runApp(const KuGouApp());
 }
 
@@ -88,6 +90,7 @@ class KuGouApp extends StatelessWidget {
     ChangeNotifierProvider.value(value: Downloader.I),
     ChangeNotifierProvider.value(value: Updater.I),
     ChangeNotifierProvider.value(value: ServerManager.I),
+    ChangeNotifierProvider.value(value: SearchSettings.I),
     ChangeNotifierProvider.value(value: MusicRecognition.I),
     ChangeNotifierProvider.value(value: LocalMusicScanner.I),
   ], child: MaterialApp(title: 'KuGou', debugShowCheckedModeBanner: false,
