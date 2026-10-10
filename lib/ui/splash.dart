@@ -58,27 +58,20 @@ class _S extends State<SplashPage> with TickerProviderStateMixin {
     return Scaffold(
       backgroundColor: AppTheme.bg,
       body: Stack(children: [
-        // 顶部光晕
         AnimatedBuilder(animation: _c2, builder: (_, __) => Positioned(
           top: -100 + 40 * _c2.value, left: -60, right: -60,
           child: Container(height: 460,
             decoration: BoxDecoration(shape: BoxShape.circle,
               gradient: RadialGradient(colors: [
-                AppTheme.p.withOpacity(0.35),
-                Colors.transparent])))),
-        ),
-        // 底部光晕
+                AppTheme.p.withOpacity(0.35), Colors.transparent]))))),
         Positioned(bottom: -140, left: -100, right: -100,
           child: Container(height: 380,
             decoration: BoxDecoration(shape: BoxShape.circle,
               gradient: RadialGradient(colors: [
-                AppTheme.s.withOpacity(0.20),
-                Colors.transparent])))),
-        // 内容
+                AppTheme.s.withOpacity(0.20), Colors.transparent])))),
         Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           AnimatedBuilder(animation: _c1, builder: (_, __) {
-            final t = Curves.easeOutCubic.transform(
-              _c1.value.clamp(0.0, 1.0));
+            final t = Curves.easeOutCubic.transform(_c1.value.clamp(0.0, 1.0));
             return Opacity(opacity: t, child: Transform.scale(
               scale: 0.7 + 0.3 * t,
               child: Container(width: 120, height: 120,
@@ -90,24 +83,10 @@ class _S extends State<SplashPage> with TickerProviderStateMixin {
                       blurRadius: 60, spreadRadius: -8),
                     BoxShadow(color: AppTheme.accent.withOpacity(0.35),
                       blurRadius: 80, spreadRadius: -10)]),
-                child: const Icon(Icons.graphic_eq, size: 60, color: Colors.white))))),
+                child: const Icon(Icons.graphic_eq, size: 60, color: Colors.white))));
           }),
           const SizedBox(height: 40),
-          // 逐字上浮
-          AnimatedBuilder(animation: _c1, builder: (_, __) {
-            const letters = ['K','u','G','o','u'];
-            return Row(mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(letters.length, (i) {
-                final start = 0.25 + i * 0.08;
-                final t = ((_c1.value - start) / 0.35).clamp(0.0, 1.0);
-                return Transform.translate(
-                  offset: Offset(0, 20 * (1 - Curves.easeOutCubic.transform(t))),
-                  child: Opacity(opacity: t, child: Text(letters[i],
-                    style: const TextStyle(color: Colors.white,
-                      fontSize: 42, fontWeight: FontWeight.w900,
-                      letterSpacing: -1))));
-              }));
-          }),
+          const _LogoText(),
           const SizedBox(height: 8),
           AnimatedBuilder(animation: _c1, builder: (_, __) {
             final t = ((_c1.value - 0.65) / 0.35).clamp(0.0, 1.0);
@@ -131,5 +110,44 @@ class _S extends State<SplashPage> with TickerProviderStateMixin {
           }),
         ])),
       ]));
+  }
+}
+
+class _LogoText extends StatefulWidget {
+  const _LogoText();
+  @override
+  State<_LogoText> createState() => _LogoTextState();
+}
+class _LogoTextState extends State<_LogoText> with SingleTickerProviderStateMixin {
+  late final AnimationController _c;
+  @override
+  void initState() {
+    super.initState();
+    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500))..forward();
+  }
+  @override
+  void dispose() { _c.dispose(); super.dispose(); }
+  @override
+  Widget build(BuildContext context) {
+    const letters = ['K','u','G','o','u'];
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: List.generate(letters.length, (i) {
+        final start = 0.15 + i * 0.10;
+        final end = start + 0.40;
+        return AnimatedBuilder(
+          animation: _c,
+          builder: (_, __) {
+            final t = ((_c.value - start) / (end - start)).clamp(0.0, 1.0);
+            final eased = Curves.easeOutCubic.transform(t);
+            return Opacity(
+              opacity: t,
+              child: Transform.translate(
+                offset: Offset(0, 20 * (1 - eased)),
+                child: Text(letters[i], style: const TextStyle(
+                  color: Colors.white, fontSize: 42,
+                  fontWeight: FontWeight.w900, letterSpacing: -1))));
+          });
+      }));
   }
 }
