@@ -189,6 +189,20 @@ class _SP extends State<SettingsPage> {
           _label('后端与下载'),
           _card([
             ListTile(
+              leading: const IconTile(icon: Icons.terminal,
+                c1: AppTheme.p, c2: AppTheme.s),
+              title: const Text('启动后端终端', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+              subtitle: const Text('联网下载 · 解压 · 启动（实时显示）', style: TextStyle(fontSize: 11.5)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () async {
+                final ok = await Navigator.push<bool>(context,
+                  MaterialPageRoute(builder: (_) => const TerminalPage()));
+                if (!mounted) return;
+                if (ok == true) _toast('后端已就绪');
+                await _refresh();
+              }),
+            const Divider(height: 1),
+            ListTile(
               leading: const IconTile(icon: Icons.dns_outlined,
                 c1: AppTheme.p, c2: const Color(0xFF0EA5E9)),
               title: const Text('服务器共享', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
