@@ -82,6 +82,7 @@ class BackendManager {
     final url = mirror.isEmpty
       ? 'https://github.com/$_owner/$_repo/releases/download/$_backendTag/$fileName'
       : '$mirror/https://github.com/$_owner/$_repo/releases/download/$_backendTag/$fileName';
+    log('下载 URL: $url');
 
     final dio = Dio(BaseOptions(
       connectTimeout: const Duration(seconds: 15),

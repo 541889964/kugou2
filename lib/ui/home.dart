@@ -164,11 +164,7 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
           child: Row(children: [
             const Text('发现', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
             const SizedBox(width: 20),
-            Text('免费听', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600,
-              color: Colors.white.withOpacity(0.45))),
-            const SizedBox(width: 16),
-            Text('乐库', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600,
-              color: Colors.white.withOpacity(0.45))),
+
             const Spacer(),
             GestureDetector(
               onTap: () => Navigator.push(context,
@@ -207,8 +203,6 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
               _sectionTitle('热歌榜'),
               _songList(_rank.take(5).toList(), 'rank'),
               const SizedBox(height: 18),
-              _sectionTitle('频道推荐'),
-              _channelGrid(),
               const SizedBox(height: 20),
             ]))),
       ])),
@@ -243,10 +237,7 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
               Expanded(child: Text('耳朵环球旅行，这些神曲绝了', maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(fontSize: 10.5, color: Colors.white.withOpacity(0.55)))),
-              Container(width: 26, height: 26,
-                decoration: BoxDecoration(color: AppTheme.s.withOpacity(0.8),
-                  borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.play_arrow, size: 15, color: Colors.white)),
+
             ]),
           ])),
         ])));

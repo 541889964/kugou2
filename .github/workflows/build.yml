@@ -9,14 +9,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: 检查 backend-runtime-v1
+
+      - name: 检测 assets 是否存在
         id: check
         run: |
-          if curl -sfI "https://github.com/541889964/kugou2/releases/download/backend-runtime-v1/node-arm64.tar.gz" >/dev/null 2>&1; then
+          COUNT=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/541889964/kugou2/releases/tags/backend-runtime-v1" \
+            | grep -c '"browser_download_url"' || true)
+          echo "已存在 assets 数: $COUNT"
+          if [ "$COUNT" -ge 2 ]; then
             echo "exists=true" >> $GITHUB_OUTPUT
+            echo "✓ 已存在，跳过"
           else
             echo "exists=false" >> $GITHUB_OUTPUT
+            echo "✗ 需要打包"
           fi
+
       - name: 下载 Termux Node arm64
         if: steps.check.outputs.exists == 'false'
         run: |
@@ -26,6 +34,7 @@ jobs:
           test -n "$FILEPATH"
           curl -fL --retry 3 -o /tmp/node.deb "https://packages.termux.dev/apt/termux-main/$FILEPATH"
           mkdir -p /tmp/nodex && dpkg-deb -x /tmp/node.deb /tmp/nodex
+
       - name: 下载 KuGouMusicApi + npm install
         if: steps.check.outputs.exists == 'false'
         run: |
@@ -38,6 +47,7 @@ jobs:
           cd /tmp/embed/backend
           npm config set registry https://registry.npmmirror.com
           npm install --production --no-audit --no-fund 2>&1 | tail -3
+
       - name: 打包 tar
         if: steps.check.outputs.exists == 'false'
         run: |
@@ -50,7 +60,8 @@ jobs:
           tar --format=ustar -czf node-arm64.tar.gz node
           tar --format=ustar -czf backend.tar.gz -C backend .
           ls -lh *.tar.gz
-      - name: 上传 tar（仅首次）
+
+      - name: 上传 tar
         if: steps.check.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
