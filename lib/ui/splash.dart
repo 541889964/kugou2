@@ -5,6 +5,7 @@ import '../playlist.dart';
 import '../signature_manager.dart';
 import '../updater.dart';
 import 'home.dart';
+import 'theme.dart';
 
 class SplashPage extends StatefulWidget {
   const SplashPage({super.key});
@@ -12,126 +13,123 @@ class SplashPage extends StatefulWidget {
   State<SplashPage> createState() => _S();
 }
 
-class _S extends State<SplashPage> with SingleTickerProviderStateMixin {
-  late final AnimationController _c;
-  late final Animation<double> _logoScale, _logoFade, _textFade, _ring;
-  String _st = '正在启动…';
+class _S extends State<SplashPage> with TickerProviderStateMixin {
+  late final AnimationController _c1, _c2;
+  String _st = '正在唤醒…';
   double _p = 0;
 
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..forward();
-    _logoScale = Tween(begin: 0.4, end: 1.0).animate(
-      CurvedAnimation(parent: _c, curve: const Interval(0.0, 0.5, curve: Curves.easeOutBack)));
-    _logoFade = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _c, curve: const Interval(0.0, 0.35, curve: Curves.easeOut)));
-    _textFade = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _c, curve: const Interval(0.35, 0.7, curve: Curves.easeOut)));
-    _ring = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _c, curve: const Interval(0.15, 1.0, curve: Curves.easeInOut)));
-    _b();
+    _c1 = AnimationController(vsync: this, duration: const Duration(milliseconds: 1800))..forward();
+    _c2 = AnimationController(vsync: this, duration: const Duration(milliseconds: 2400))
+      ..repeat(reverse: true);
+    _boot();
   }
 
-  Future<void> _b() async {
-    setState(() { _st = '加载签名配置…'; _p = 0.20; });
+  Future<void> _boot() async {
+    setState(() { _st = '加载签名…'; _p = 0.20; });
     await SignatureManager.I.init();
-    setState(() { _st = '检查 Cookie 健康…'; _p = 0.42; });
+    setState(() { _st = '检查 Cookie…'; _p = 0.42; });
     try { await SignatureManager.I.checkHealth().timeout(const Duration(seconds: 5)); } catch (_) {}
-    setState(() { _st = '恢复播放模式…'; _p = 0.58; });
+    setState(() { _st = '恢复模式…'; _p = 0.60; });
     await ModeManager.I.init();
-    setState(() { _st = '同步收藏数据…'; _p = 0.76; });
+    setState(() { _st = '同步收藏…'; _p = 0.78; });
     await PlaylistService.I.init();
-    setState(() { _st = '检查云端更新…'; _p = 0.92; });
+    setState(() { _st = '检查更新…'; _p = 0.94; });
     Updater.I.check();
-    final elapsed = (_c.value * 1400).toInt();
-    if (elapsed < 1250) await Future.delayed(Duration(milliseconds: 1250 - elapsed));
+    await Future.delayed(const Duration(milliseconds: 1200));
     setState(() { _st = '就绪'; _p = 1.0; });
     await Future.delayed(const Duration(milliseconds: 200));
     if (!mounted) return;
     Navigator.of(context).pushReplacement(PageRouteBuilder(
       pageBuilder: (_, __, ___) => const RootPage(),
-      transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
-      transitionDuration: const Duration(milliseconds: 380)));
+      transitionsBuilder: (_, a, __, c) => FadeTransition(
+        opacity: CurvedAnimation(parent: a, curve: Curves.easeOutCubic),
+        child: c),
+      transitionDuration: const Duration(milliseconds: 500)));
   }
 
   @override
-  void dispose() { _c.dispose(); super.dispose(); }
+  void dispose() { _c1.dispose(); _c2.dispose(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(backgroundColor: const Color(0xFF0D0D10), body: Container(
-      decoration: const BoxDecoration(gradient: LinearGradient(
-        begin: Alignment.topLeft, end: Alignment.bottomRight,
-        colors: [Color(0xFF1A1730), Color(0xFF0D0D10), Color(0xFF13202A)])),
-      child: Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-        AnimatedBuilder(animation: _c, builder: (_, __) => Opacity(
-          opacity: _logoFade.value,
-          child: Transform.scale(scale: _logoScale.value, child: SizedBox(
-            width: 180, height: 180,
-            child: Stack(alignment: Alignment.center, children: [
-              Container(width: 180, height: 180, decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(colors: [
-                  const Color(0xFF7C6CB0).withOpacity(0.48 * _logoFade.value),
-                  Colors.transparent]))),
-              CustomPaint(size: const Size(180, 180),
-                painter: _RingPainter(progress: _ring.value, color: const Color(0xFF7C6CB0))),
-              Container(width: 96, height: 96, decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft, end: Alignment.bottomRight,
-                  colors: [Color(0xFF7C6CB0), Color(0xFF5A5480)]),
-                boxShadow: [BoxShadow(color: const Color(0xFF7C6CB0).withOpacity(0.55),
-                  blurRadius: 32, spreadRadius: 2)]),
-                child: const Icon(Icons.music_note, size: 50, color: Colors.white)),
-            ]))))),
-        const SizedBox(height: 46),
-        AnimatedBuilder(animation: _textFade, builder: (_, __) => Opacity(
-          opacity: _textFade.value,
-          child: Column(children: [
-            const Text('KuGou', style: TextStyle(color: Colors.white, fontSize: 44,
-              fontWeight: FontWeight.w900, letterSpacing: 7,
-              shadows: [Shadow(color: Color(0xFF7C6CB0), blurRadius: 22)])),
-            const SizedBox(height: 12),
-            Text('遇见更好的音乐', style: TextStyle(
-              color: Colors.white.withOpacity(0.72), fontSize: 13, letterSpacing: 5)),
-          ]))),
-        const SizedBox(height: 68),
-        AnimatedBuilder(animation: _c, builder: (_, __) => Column(children: [
-          SizedBox(width: 220, child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(value: _p > 0 ? _p : null, minHeight: 4,
-              backgroundColor: Colors.white.withOpacity(0.08),
-              valueColor: const AlwaysStoppedAnimation(Color(0xFF7C6CB0))))),
-          const SizedBox(height: 18),
-          Text(_st, style: TextStyle(color: Colors.white.withOpacity(0.62),
-            fontSize: 12, letterSpacing: 1.5)),
+    return Scaffold(
+      backgroundColor: AppTheme.bg,
+      body: Stack(children: [
+        // 顶部光晕
+        AnimatedBuilder(animation: _c2, builder: (_, __) => Positioned(
+          top: -100 + 40 * _c2.value, left: -60, right: -60,
+          child: Container(height: 460,
+            decoration: BoxDecoration(shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [
+                AppTheme.p.withOpacity(0.35),
+                Colors.transparent])))),
+        ),
+        // 底部光晕
+        Positioned(bottom: -140, left: -100, right: -100,
+          child: Container(height: 380,
+            decoration: BoxDecoration(shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [
+                AppTheme.s.withOpacity(0.20),
+                Colors.transparent])))),
+        // 内容
+        Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          AnimatedBuilder(animation: _c1, builder: (_, __) {
+            final t = Curves.easeOutCubic.transform(
+              _c1.value.clamp(0.0, 1.0));
+            return Opacity(opacity: t, child: Transform.scale(
+              scale: 0.7 + 0.3 * t,
+              child: Container(width: 120, height: 120,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(36),
+                  gradient: AppTheme.grad3,
+                  boxShadow: [
+                    BoxShadow(color: AppTheme.p.withOpacity(0.55),
+                      blurRadius: 60, spreadRadius: -8),
+                    BoxShadow(color: AppTheme.accent.withOpacity(0.35),
+                      blurRadius: 80, spreadRadius: -10)]),
+                child: const Icon(Icons.graphic_eq, size: 60, color: Colors.white))))),
+          }),
+          const SizedBox(height: 40),
+          // 逐字上浮
+          AnimatedBuilder(animation: _c1, builder: (_, __) {
+            const letters = ['K','u','G','o','u'];
+            return Row(mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(letters.length, (i) {
+                final start = 0.25 + i * 0.08;
+                final t = ((_c1.value - start) / 0.35).clamp(0.0, 1.0);
+                return Transform.translate(
+                  offset: Offset(0, 20 * (1 - Curves.easeOutCubic.transform(t))),
+                  child: Opacity(opacity: t, child: Text(letters[i],
+                    style: const TextStyle(color: Colors.white,
+                      fontSize: 42, fontWeight: FontWeight.w900,
+                      letterSpacing: -1))));
+              }));
+          }),
+          const SizedBox(height: 8),
+          AnimatedBuilder(animation: _c1, builder: (_, __) {
+            final t = ((_c1.value - 0.65) / 0.35).clamp(0.0, 1.0);
+            return Opacity(opacity: t, child: Text('遇见更好的音乐',
+              style: TextStyle(color: Colors.white.withOpacity(0.55),
+                fontSize: 12, letterSpacing: 6)));
+          }),
+          const SizedBox(height: 80),
+          AnimatedBuilder(animation: _c1, builder: (_, __) {
+            final t = ((_c1.value - 0.7) / 0.3).clamp(0.0, 1.0);
+            return Opacity(opacity: t, child: Column(children: [
+              SizedBox(width: 180, child: ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(value: _p, minHeight: 3,
+                  backgroundColor: Colors.white.withOpacity(0.08),
+                  valueColor: const AlwaysStoppedAnimation(AppTheme.p)))),
+              const SizedBox(height: 16),
+              Text(_st, style: TextStyle(color: Colors.white.withOpacity(0.5),
+                fontSize: 11, letterSpacing: 2)),
+            ]));
+          }),
         ])),
-      ]))));
+      ]));
   }
-}
-
-class _RingPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  _RingPainter({required this.progress, required this.color});
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = size.center(Offset.zero);
-    final radius = size.width / 2 - 4;
-    canvas.drawCircle(center, radius, Paint()
-      ..style = PaintingStyle.stroke..strokeWidth = 2
-      ..color = Colors.white.withOpacity(0.06));
-    final fg = Paint()
-      ..style = PaintingStyle.stroke..strokeWidth = 3.2..strokeCap = StrokeCap.round
-      ..shader = SweepGradient(
-        colors: [color.withOpacity(0.05), color, const Color(0xFF8FA3B8)],
-        stops: const [0.0, 0.55, 1.0],
-      ).createShader(Rect.fromCircle(center: center, radius: radius));
-    canvas.drawArc(Rect.fromCircle(center: center, radius: radius),
-      -math.pi / 2, 2 * math.pi * progress, false, fg);
-  }
-  @override
-  bool shouldRepaint(covariant _RingPainter old) => old.progress != progress;
 }

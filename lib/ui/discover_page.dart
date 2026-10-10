@@ -5,6 +5,7 @@ import '../kugou.dart';
 import '../player.dart';
 import '../source_manager.dart';
 import 'player_page.dart';
+import 'settings.dart';
 import 'theme.dart';
 import 'glass.dart';
 
@@ -41,52 +42,53 @@ class _D extends State<DiscoverPage> with AutomaticKeepAliveClientMixin {
     final tabs = ['每日推荐', ...NetMusic.rankIds.keys];
     return Scaffold(
       backgroundColor: Colors.transparent,
-      appBar: AppBar(title: const Text('发现')),
-      body: Column(children: [
-        // 顶部来源提示条
-        Padding(padding: const EdgeInsets.fromLTRB(16, 6, 16, 0),
-          child: GestureDetector(
-            onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => const SettingsPage())),
-            child: GlassCard(radius: 10, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7), heavy: true,
-              child: Row(children: [
-                Icon(sm.discover == MusicSource.concept ? Icons.diamond : Icons.cloud_queue,
-                  size: 13,
-                  color: sm.discover == MusicSource.concept ? AppTheme.p : const Color(0xFFFF9090)),
-                const SizedBox(width: 6),
-                Text('榜单来源：${sm.discoverLabel}',
-                  style: TextStyle(fontSize: 11,
-                    color: sm.discover == MusicSource.concept ? AppTheme.p : const Color(0xFFFF9090),
-                    fontWeight: FontWeight.w600)),
-                const Spacer(),
-                Text('去设置切换', style: TextStyle(fontSize: 10.5, color: Colors.white.withOpacity(0.45))),
-                const SizedBox(width: 2),
-                Icon(Icons.chevron_right, size: 13, color: Colors.white.withOpacity(0.45)),
-              ])))),
-        const SizedBox(height: 6),
-        SizedBox(height: 40, child: ListView.builder(
+      body: SafeArea(bottom: false, child: Column(children: [
+        Padding(padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+          child: Row(children: [
+            const Text('发现', style: TextStyle(fontSize: 24,
+              fontWeight: FontWeight.w900, letterSpacing: -0.4)),
+            const Spacer(),
+            GestureDetector(
+              onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const SettingsPage())),
+              child: GlassCard(radius: 20, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), heavy: true,
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(sm.discover == MusicSource.concept ? Icons.diamond : Icons.cloud,
+                    size: 12,
+                    color: sm.discover == MusicSource.concept ? AppTheme.p : AppTheme.accent),
+                  const SizedBox(width: 5),
+                  Text(sm.discoverLabel, style: TextStyle(fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: sm.discover == MusicSource.concept ? AppTheme.p : AppTheme.accent)),
+                ]))),
+          ])),
+        SizedBox(height: 42, child: ListView.builder(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           itemCount: tabs.length,
           itemBuilder: (_, i) {
             final active = i == _tab;
             return Padding(padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: TextButton(
-                style: TextButton.styleFrom(
-                  backgroundColor: active ? AppTheme.p.withOpacity(0.20) : Colors.transparent,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20),
-                    side: BorderSide(color: active ? AppTheme.p.withOpacity(0.5) : Colors.white.withOpacity(0.10))),
-                  padding: const EdgeInsets.symmetric(horizontal: 14), minimumSize: Size.zero),
-                onPressed: () => setState(() => _tab = i),
-                child: Text(tabs[i], style: TextStyle(fontSize: 12,
-                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                  color: active ? Colors.white : Colors.white70))));
+              child: AnimatedContainer(duration: const Duration(milliseconds: 240),
+                decoration: BoxDecoration(
+                  gradient: active ? AppTheme.grad : null,
+                  color: active ? null : Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: active
+                    ? Colors.transparent : Colors.white.withOpacity(0.10))),
+                child: Material(color: Colors.transparent, child: InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => setState(() => _tab = i),
+                  child: Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    child: Center(child: Text(tabs[i], style: TextStyle(fontSize: 12.5,
+                      fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                      color: active ? Colors.white : Colors.white.withOpacity(0.7))))))));
           })),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         Expanded(child: _loading
           ? const Center(child: CircularProgressIndicator())
           : _list()),
-      ]),
+      ])),
     );
   }
 
@@ -100,8 +102,8 @@ class _D extends State<DiscoverPage> with AutomaticKeepAliveClientMixin {
     if (list.isEmpty) return Center(child: Text('暂无数据',
       style: TextStyle(color: Colors.white.withOpacity(0.5))));
     return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      itemCount: list.length, itemExtent: 68,
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
+      itemCount: list.length,
       itemBuilder: (_, i) => RepaintBoundary(child: _item(list[i], i)));
   }
 
@@ -109,24 +111,31 @@ class _D extends State<DiscoverPage> with AutomaticKeepAliveClientMixin {
     final name = (m['name'] ?? '').toString();
     final artist = (m['artist'] ?? '').toString();
     return GlassCard(
-      margin: const EdgeInsets.symmetric(vertical: 3),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      radius: 14,
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      radius: 16,
       onTap: () => _play(name, artist),
       child: Row(children: [
-        SizedBox(width: 28, child: Text('${i + 1}',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700,
-            color: i < 3 ? const Color(0xFFFF6B6B) : Colors.white.withOpacity(0.5)))),
-        const SizedBox(width: 12),
+        SizedBox(width: 32, child: Text('${i + 1}',
+          style: TextStyle(fontSize: 17,
+            fontWeight: FontWeight.w900,
+            color: i == 0 ? AppTheme.accent
+              : i == 1 ? AppTheme.p
+              : i == 2 ? AppTheme.s
+              : Colors.white.withOpacity(0.4)))),
+        const SizedBox(width: 10),
         Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
-          const SizedBox(height: 2),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 3),
           Text(artist, maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 11.5, color: Colors.white.withOpacity(0.6))),
+            style: TextStyle(fontSize: 11.5, color: Colors.white.withOpacity(0.55))),
         ])),
-        Icon(Icons.play_circle_outline, size: 22, color: Colors.white.withOpacity(0.5)),
+        Container(width: 32, height: 32,
+          decoration: BoxDecoration(shape: BoxShape.circle,
+            color: Colors.white.withOpacity(0.08)),
+          child: Icon(Icons.play_arrow, size: 18, color: Colors.white.withOpacity(0.8))),
       ]));
   }
 

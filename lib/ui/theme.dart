@@ -1,36 +1,79 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
 class AppTheme {
-  static const p = Color(0xFF7C6CB0);
-  static const s = Color(0xFF8FA3B8);
-  static const bg = Color(0xFF0D0D10);
+  // 主色：紫罗兰
+  static const p = Color(0xFF8B5CF6);
+  // 辅助：极光青
+  static const s = Color(0xFF22D3EE);
+  // 强调：玫粉
+  static const accent = Color(0xFFF472B6);
+  // 背景层
+  static const bg = Color(0xFF0A0A10);
+  static const surface = Color(0xFF15151E);
+  static const surfaceHigh = Color(0xFF1E1E2A);
+
   static ThemeData dark() {
-    final sc = ColorScheme.fromSeed(seedColor: p, brightness: Brightness.dark);
+    final sc = ColorScheme.fromSeed(
+      seedColor: p, brightness: Brightness.dark, surface: surface);
     return ThemeData(
       useMaterial3: true,
       colorScheme: sc,
       scaffoldBackgroundColor: Colors.transparent,
+      splashFactory: InkSparkle.splashFactory,
       pageTransitionsTheme: const PageTransitionsTheme(builders: {
         TargetPlatform.android: CupertinoPageTransitionsBuilder(),
       }),
       appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.transparent, elevation: 0, centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: false,
         scrolledUnderElevation: 0,
-        titleTextStyle: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w600, color: Colors.white, letterSpacing: 0.3)),
+        systemOverlayStyle: SystemUiOverlayStyle.light,
+        titleTextStyle: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w800,
+          color: Colors.white,
+          letterSpacing: -0.3,
+        ),
+      ),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: Colors.transparent, indicatorColor: p.withOpacity(0.18), height: 62,
+        backgroundColor: Colors.transparent,
+        indicatorColor: Colors.transparent,
+        height: 64,
+        elevation: 0,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         labelTextStyle: WidgetStatePropertyAll(
-          TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white.withOpacity(0.85)))),
+          TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600,
+            color: Colors.white.withOpacity(0.7))),
+      ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
-      sliderTheme: SliderThemeData(activeTrackColor: p, thumbColor: p,
-        overlayColor: p.withOpacity(0.12), inactiveTrackColor: Colors.white.withOpacity(0.10)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700))),
+      sliderTheme: SliderThemeData(
+        activeTrackColor: p,
+        thumbColor: Colors.white,
+        overlayColor: p.withOpacity(0.15),
+        inactiveTrackColor: Colors.white.withOpacity(0.10),
+        trackHeight: 3,
+        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+        overlayShape: const RoundSliderOverlayShape(overlayRadius: 14)),
     );
   }
-  static const grad = LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
-    colors: [Color(0xFF7C6CB0), Color(0xFF5A5480)]);
-  static const discGrad = LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
-    colors: [Color(0xFF7C6CB0), Color(0xFF5A5480)]);
+
+  // 三色渐层
+  static const grad = LinearGradient(
+    begin: Alignment.topLeft, end: Alignment.bottomRight,
+    colors: [Color(0xFF8B5CF6), Color(0xFF22D3EE)]);
+  static const grad3 = LinearGradient(
+    begin: Alignment.topLeft, end: Alignment.bottomRight,
+    colors: [Color(0xFF8B5CF6), Color(0xFFF472B6), Color(0xFF22D3EE)]);
+  static const discGrad = LinearGradient(
+    begin: Alignment.topLeft, end: Alignment.bottomRight,
+    colors: [Color(0xFF8B5CF6), Color(0xFFF472B6)]);
+  static const playerGrad = LinearGradient(
+    begin: Alignment.topCenter, end: Alignment.bottomCenter,
+    colors: [Color(0xFF1A1530), Color(0xFF0A0A10)]);
 }
