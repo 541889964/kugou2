@@ -256,4 +256,17 @@ class BackendManager {
   }
   static Future<bool> isLiteOnline() => isOnline(3000);
   static Future<bool> isStandardOnline() => isOnline(3001);
+
+  // ============= 兼容旧 API =============
+  static const startScriptPath = '/storage/emulated/0/Download/kugou-backend-start.sh';
+  static const stopScriptPath = '/storage/emulated/0/Download/kugou-backend-stop.sh';
+  static const startCmd = 'bash /storage/emulated/0/Download/kugou-backend-start.sh';
+  static const stopCmd = 'bash /storage/emulated/0/Download/kugou-backend-stop.sh';
+
+  static Future<(bool, String)> generateScripts() async =>
+      (false, '已改用内嵌后端');
+  static Future<bool> startScriptExists() async => false;
+  static Future<String?> getGithubUrl() async => null;
+  static Future<void> setGithubUrl(String _) async {}
+  static Future<void> clearGithubUrl() async {}
 }

@@ -25,7 +25,7 @@ class SettingsPage extends StatefulWidget {
   State<SettingsPage> createState() => _SP();
 }
 class _SP extends State<SettingsPage> {
-  bool _importing = false;
+  bool _importing = false, _generating = false, _hasStart = false;
   bool _liteOn = false, _checking = false;
   String _verifyMsg = '';
 
@@ -37,6 +37,18 @@ class _SP extends State<SettingsPage> {
     final l = await BackendManager.isLiteOnline();
     if (!mounted) return;
     setState(() { _hasStart = s; _liteOn = l; });
+  }
+
+  Future<void> _generate() async {
+    setState(() => _generating = true);
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    setState(() { _generating = false; _hasStart = true; });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: const Text('已改用内嵌后端（设置 → 启动后端终端）'),
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: AppTheme.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
   }
 
   Future<void> _pickFile() async {
