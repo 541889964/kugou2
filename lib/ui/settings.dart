@@ -12,6 +12,7 @@ import '../signature_manager.dart';
 import '../source_manager.dart';
 import '../updater.dart';
 import 'server_page.dart';
+import 'terminal_page.dart';
 import 'wallpaper_page.dart';
 import 'downloads_page.dart';
 import '../wallpaper_manager.dart';

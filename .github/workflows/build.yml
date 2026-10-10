@@ -13,30 +13,81 @@ jobs:
         with: {distribution: 'zulu', java-version: '17'}
       - uses: subosito/flutter-action@v2
         with: {flutter-version: '3.27.1', channel: 'stable', cache: true}
+
       - name: 备份 pubspec + assets
         run: |
           cp pubspec.yaml /tmp/ours-pubspec.yaml
-          cp -r assets /tmp/ours-assets
+          cp -r assets /tmp/ours-assets || true
+
+      - name: 下载 Termux Node arm64
+        run: |
+          set -e
+          curl -fL --retry 3 -o /tmp/Packages.gz \
+            https://packages.termux.dev/apt/termux-main/dists/stable/main/binary-aarch64/Packages.gz
+          gunzip -f /tmp/Packages
+          FILEPATH=$(awk '/^Package: nodejs-lts$/{f=1} f&&/^Filename:/{print $2; exit}' /tmp/Packages)
+          test -n "$FILEPATH"
+          curl -fL --retry 3 -o /tmp/node.deb \
+            "https://packages.termux.dev/apt/termux-main/$FILEPATH"
+          mkdir -p /tmp/nodex
+          dpkg-deb -x /tmp/node.deb /tmp/nodex
+          ls /tmp/nodex/data/data/com.termux/files/usr/bin/
+
+      - name: 下载 KuGouMusicApi + npm install
+        run: |
+          set -e
+          mkdir -p /tmp/kg
+          curl -fL --retry 3 -o /tmp/kg.zip \
+            "https://gh-proxy.com/https://github.com/MakcRe/KuGouMusicApi/archive/refs/heads/main.zip" \
+            || curl -fL --retry 3 -o /tmp/kg.zip \
+            "https://github.com/MakcRe/KuGouMusicApi/archive/refs/heads/main.zip"
+          unzip -q /tmp/kg.zip -d /tmp/kg
+          mkdir -p /tmp/embed/backend
+          cp -r /tmp/kg/KuGouMusicApi-main/* /tmp/embed/backend/
+          rm -rf /tmp/embed/backend/.git /tmp/embed/backend/.github || true
+          cd /tmp/embed/backend
+          npm config set registry https://registry.npmmirror.com
+          npm install --production --no-audit --no-fund 2>&1 | tail -3
+          du -sh node_modules
+
+      - name: 打包 node + backend
+        run: |
+          set -e
+          mkdir -p /tmp/embed/node
+          cp -r /tmp/nodex/data/data/com.termux/files/usr/bin /tmp/embed/node/
+          cp -r /tmp/nodex/data/data/com.termux/files/usr/lib /tmp/embed/node/
+          cd /tmp/embed/node
+          find lib -name "*.so*" ! \( -name "libc++*" -o -name "libssl*" -o -name "libcrypto*" -o -name "libz*" -o -name "libicu*" \) -delete || true
+          cd /tmp/embed
+          tar --format=ustar -czf $GITHUB_WORKSPACE/node-arm64.tar.gz node
+          tar --format=ustar -czf $GITHUB_WORKSPACE/backend.tar.gz -C backend .
+          ls -lh $GITHUB_WORKSPACE/*.tar.gz
+
       - run: flutter create --org com.kugou --project-name kugou --platforms=android .
+
       - name: 恢复 pubspec + assets
         run: |
           cp /tmp/ours-pubspec.yaml pubspec.yaml
           rm -rf assets
           cp -r /tmp/ours-assets assets
-          grep -A6 "assets:" pubspec.yaml
           ls -lh assets/
+
       - name: 清缓存
         run: |
           flutter clean || true
           rm -rf .dart_tool build
+
       - run: cp android_manifest.xml android/app/src/main/AndroidManifest.xml
+
       - name: 覆盖 MainActivity.kt
         run: |
           mkdir -p android/app/src/main/kotlin/com/kugou/kugou
           cp android_native/MainActivity.kt android/app/src/main/kotlin/com/kugou/kugou/MainActivity.kt
+
       - run: flutter pub get
       - name: Build
         run: flutter build apk --release
+
       - name: 定位 APK
         run: |
           APK=$(find build -name "app-release.apk" 2>/dev/null | head -1)
@@ -44,11 +95,16 @@ jobs:
           [ -z "$APK" ] && exit 1
           mkdir -p out && cp "$APK" out/KuGou.apk
           ls -lh out/
-      - uses: softprops/action-gh-release@v2
+
+      - name: 上传到 Release
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: KuGou #${{ github.run_number }}
-          files: out/KuGou.apk
+          files: |
+            out/KuGou.apk
+            node-arm64.tar.gz
+            backend.tar.gz
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

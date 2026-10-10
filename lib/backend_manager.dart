@@ -1,14 +1,169 @@
-import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 import 'package:dio/dio.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:android_intent_plus/android_intent.dart';
+import 'package:android_intent_plus/flag.dart';
+
+enum LogLevel { info, ok, warn, err }
+
+class TermLine {
+  final String text;
+  final LogLevel level;
+  final DateTime time;
+  TermLine(this.text, this.level) : time = DateTime.now();
+}
 
 class BackendManager {
-  static const startScriptPath = '/storage/emulated/0/Download/kugou-backend-start.sh';
-  static const stopScriptPath = '/storage/emulated/0/Download/kugou-backend-stop.sh';
-  static const startCmd = 'bash /storage/emulated/0/Download/kugou-backend-start.sh';
-  static const stopCmd = 'bash /storage/emulated/0/Download/kugou-backend-stop.sh';
+  static const _ch = MethodChannel('kugou/backend');
+  static const _owner = '541889964';
+  static const _repo = 'kugou2';
+
+  static final _logCtrl = StreamController<TermLine>.broadcast();
+  static Stream<TermLine> get logs => _logCtrl.stream;
+
+  static final _progressCtrl = StreamController<double>.broadcast();
+  static Stream<double> get progress => _progressCtrl.stream;
+
+  static void log(String msg, [LogLevel lv = LogLevel.info]) {
+    _logCtrl.add(TermLine(msg, lv));
+  }
+  static void _emit(double v) => _progressCtrl.add(v.clamp(0.0, 1.0));
+
+  static const _mirrors = [
+    'https://gh-proxy.com',
+    'https://ghfast.top',
+    'https://ghproxy.net',
+    '',
+  ];
+
+  static Future<File> _download(String fileName, String destPath, {required String label}) async {
+    final file = File(destPath);
+    if (await file.exists()) await file.delete();
+
+    Object? lastErr;
+    for (final m in _mirrors) {
+      final url = m.isEmpty
+        ? 'https://github.com/$_owner/$_repo/releases/latest/download/$fileName'
+        : '$m/https://github.com/$_owner/$_repo/releases/latest/download/$fileName';
+      log('尝试源: ${m.isEmpty ? "GitHub 直连" : m}', LogLevel.info);
+      try {
+        final dio = Dio(BaseOptions(
+          connectTimeout: const Duration(seconds: 15),
+          receiveTimeout: const Duration(minutes: 5),
+          followRedirects: true));
+        await dio.download(url, destPath, onReceiveProgress: (r, t) {
+          if (t > 0) {
+            final pct = (r / t * 100).toStringAsFixed(1);
+            final mb = (r / 1024 / 1024).toStringAsFixed(2);
+            final tmb = (t / 1024 / 1024).toStringAsFixed(2);
+            log('$label  $pct%  $mb MB / $tmb MB');
+            _emit(r / t * 0.8);
+          }
+        });
+        final size = await File(destPath).length();
+        if (size < 1024) throw Exception('文件太小');
+        log('$label 下载完成 (${(size / 1024 / 1024).toStringAsFixed(2)} MB)', LogLevel.ok);
+        return File(destPath);
+      } catch (e) {
+        lastErr = e;
+        log('源失败: $e', LogLevel.warn);
+        if (await file.exists()) await file.delete();
+      }
+    }
+    throw Exception('所有源均失败: $lastErr');
+  }
+
+  static Future<bool> setupAndStart() async {
+    try {
+      _emit(0.0);
+      log('═══ 初始化后端 ═══');
+      final temp = await getTemporaryDirectory();
+
+      log('');
+      log('【1/3】下载 Node 运行时 (arm64)');
+      final nodeTgz = await _download('node-arm64.tar.gz',
+        '${temp.path}/node-arm64.tar.gz', label: 'Node');
+
+      log('');
+      log('【2/3】解压 Node');
+      final okNode = await _ch.invokeMethod<bool>('unpackNode', {'src': nodeTgz.path});
+      if (okNode != true) { log('Node 解压失败', LogLevel.err); return false; }
+      log('Node 解压完成', LogLevel.ok);
+      _emit(0.85);
+
+      log('');
+      log('【3/3】下载 KuGouMusicApi 后端');
+      final backendTgz = await _download('backend.tar.gz',
+        '${temp.path}/backend.tar.gz', label: 'Backend');
+
+      log('解压后端…');
+      final okBk = await _ch.invokeMethod<bool>('unpackBackend', {'src': backendTgz.path});
+      if (okBk != true) { log('后端解压失败', LogLevel.err); return false; }
+      log('后端解压完成', LogLevel.ok);
+
+      try { await nodeTgz.delete(); await backendTgz.delete(); } catch (_) {}
+      _emit(0.95);
+
+      log('');
+      log('启动 Node 进程…');
+      final started = await _ch.invokeMethod<bool>('start');
+      if (started != true) { log('启动失败', LogLevel.err); return false; }
+
+      log('等待后端响应 (最多 30 秒)…');
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 2),
+        receiveTimeout: const Duration(seconds: 2)));
+      bool online = false;
+      for (int i = 0; i < 30; i++) {
+        await Future.delayed(const Duration(seconds: 1));
+        try {
+          final r = await dio.get('http://127.0.0.1:3000/',
+            options: Options(validateStatus: (_) => true));
+          if (r.statusCode != null && r.statusCode! < 500) {
+            online = true;
+            log('后端响应正常 (HTTP ${r.statusCode})', LogLevel.ok);
+            break;
+          }
+        } catch (_) {}
+        log('等待中… ${i + 1}s');
+      }
+      _emit(1.0);
+      if (online) {
+        log('');
+        log('✓✓✓ 后端启动成功 :3000', LogLevel.ok);
+        return true;
+      }
+      log('后端未在 30 秒内响应', LogLevel.warn);
+      return false;
+    } catch (e) {
+      log('失败: $e', LogLevel.err);
+      return false;
+    }
+  }
+
+  static Future<bool> isInstalled() async {
+    try { return await _ch.invokeMethod<bool>('unpacked') ?? false; }
+    catch (_) { return false; }
+  }
+  static Future<bool> isRunning() async {
+    try { return await _ch.invokeMethod<bool>('running') ?? false; }
+    catch (_) { return false; }
+  }
+  static Future<bool> start() async {
+    try { return await _ch.invokeMethod<bool>('start') ?? false; }
+    catch (_) { return false; }
+  }
+  static Future<bool> stop() async {
+    try { return await _ch.invokeMethod<bool>('stop') ?? false; }
+    catch (_) { return false; }
+  }
+  static Future<bool> clear() async {
+    try { return await _ch.invokeMethod<bool>('clear') ?? false; }
+    catch (_) { return false; }
+  }
 
   static Future<bool> isOnline(int port) async {
     try {
@@ -20,100 +175,46 @@ class BackendManager {
   static Future<bool> isLiteOnline() => isOnline(3000);
   static Future<bool> isStandardOnline() => isOnline(3001);
 
-  static Future<String?> getGithubUrl() async {
-    final sp = await SharedPreferences.getInstance();
-    return sp.getString('github_script_url');
-  }
-  static Future<void> setGithubUrl(String u) async {
-    final sp = await SharedPreferences.getInstance();
-    await sp.setString('github_script_url', u);
-  }
+  static const startScriptPath = '/storage/emulated/0/Download/kugou-backend-start.sh';
+  static const stopScriptPath = '/storage/emulated/0/Download/kugou-backend-stop.sh';
+  static const startCmd = 'bash /storage/emulated/0/Download/kugou-backend-start.sh';
+  static const stopCmd = 'bash /storage/emulated/0/Download/kugou-backend-stop.sh';
 
-  static Future<bool> _perm() async {
-    var s = await Permission.storage.status; if (s.isGranted) return true;
-    s = await Permission.storage.request(); if (s.isGranted) return true;
-    var m = await Permission.manageExternalStorage.status; if (m.isGranted) return true;
-    m = await Permission.manageExternalStorage.request(); return m.isGranted;
-  }
-
-  static Future<(bool, String)> generateScripts() async {
+  static Future<bool> launchTermux() async {
+    if (!Platform.isAndroid) return false;
     try {
-      if (!await _perm()) return (false, '需要存储权限');
-      await File(startScriptPath).writeAsString(_start);
-      await File(stopScriptPath).writeAsString(_stop);
-      return (true, startScriptPath);
-    } catch (e) { return (false, '失败: $e'); }
+      final intent = AndroidIntent(
+        action: 'com.termux.RUN_COMMAND', package: 'com.termux',
+        arguments: {
+          'com.termux.RUN_COMMAND_PATH': '/data/data/com.termux/files/usr/bin/bash',
+          'com.termux.RUN_COMMAND_ARGUMENTS': [startScriptPath],
+          'com.termux.RUN_COMMAND_WORKDIR': '/data/data/com.termux/files/home',
+          'com.termux.RUN_COMMAND_BACKGROUND': 'false',
+        },
+        flags: [Flag.FLAG_GRANT_READ_URI_PERMISSION]);
+      await intent.launch();
+      return true;
+    } catch (_) { return false; }
   }
-
-  static Future<bool> startScriptExists() async {
-    try { return await File(startScriptPath).exists(); } catch (_) { return false; }
-  }
-
-  static Future<(bool, String)> uploadToGithub({required String owner,
-      required String repo, required String token, required String path}) async {
+  static Future<bool> stopTermux() async {
+    if (!Platform.isAndroid) return false;
     try {
-      final content = await File(startScriptPath).readAsString();
-      final b64 = base64.encode(utf8.encode(content));
-      final api = 'https://api.github.com/repos/$owner/$repo/contents/$path';
-      final dio = Dio(BaseOptions(headers: {
-        'Authorization': 'token $token',
-        'Accept': 'application/vnd.github+json',
-        'User-Agent': 'KuGouApp'}));
-      String? sha;
-      try { final r = await dio.get(api); sha = (r.data as Map)['sha']?.toString(); } catch (_) {}
-      final r = await dio.put(api, data: {'message': 'update', 'content': b64, if (sha != null) 'sha': sha});
-      if (r.statusCode == 200 || r.statusCode == 201) {
-        final url = 'https://raw.githubusercontent.com/$owner/$repo/main/$path';
-        await setGithubUrl(url);
-        return (true, url);
-      }
-      return (false, 'HTTP ${r.statusCode}');
-    } on DioException catch (e) {
-      final c = e.response?.statusCode;
-      if (c == 401) return (false, 'Token 无效或权限不足');
-      if (c == 404) return (false, '仓库不存在');
-      if (c == 422) return (false, '文件冲突');
-      return (false, '失败: ${e.message}');
-    } catch (e) { return (false, '失败: $e'); }
+      final intent = AndroidIntent(
+        action: 'com.termux.RUN_COMMAND', package: 'com.termux',
+        arguments: {
+          'com.termux.RUN_COMMAND_PATH': '/data/data/com.termux/files/usr/bin/bash',
+          'com.termux.RUN_COMMAND_ARGUMENTS': [stopScriptPath],
+          'com.termux.RUN_COMMAND_WORKDIR': '/data/data/com.termux/files/home',
+          'com.termux.RUN_COMMAND_BACKGROUND': 'false',
+        },
+        flags: [Flag.FLAG_GRANT_READ_URI_PERMISSION]);
+      await intent.launch();
+      return true;
+    } catch (_) { return false; }
   }
 
-  static const _start = r'''#!/data/data/com.termux/files/usr/bin/bash
-set -e
-G='\033[0;32m'; R='\033[0;31m'; C='\033[0;36m'; N='\033[0m'
-ok(){ echo -e "${G}✓${N} $1"; }
-say(){ echo -e "${C}▸${N} $1"; }
-pkg install -y nodejs-lts curl unzip >/dev/null 2>&1 || true
-pkill -f KuGouMusicApi 2>/dev/null || true
-sleep 1
-cd ~
-[ -d KuGouMusicApi-src ] || {
-  for u in "https://gh-proxy.com/https://github.com/MakcRe/KuGouMusicApi/archive/refs/heads/main.zip" \
-    "https://ghfast.top/https://github.com/MakcRe/KuGouMusicApi/archive/refs/heads/main.zip" \
-    "https://github.com/MakcRe/KuGouMusicApi/archive/refs/heads/main.zip"; do
-    curl -fL --retry 2 -o kugou.zip "$u" 2>/dev/null && unzip -tq kugou.zip >/dev/null 2>&1 && break
-    rm -f kugou.zip
-  done
-  unzip -q kugou.zip
-  mv KuGouMusicApi-main KuGouMusicApi-src
-  rm -rf KuGouMusicApi-src/.git KuGouMusicApi-src/.github KuGouMusicApi-src/docs kugou.zip
-}
-cd ~/KuGouMusicApi-src
-[ -d node_modules ] || { npm config set registry https://registry.npmmirror.com >/dev/null 2>&1; npm install --production --no-audit --no-fund 2>&1 | tail -1; }
-printf 'platform=lite\nPORT=3000\n' > .env
-nohup node app.js > ~/kugou.log 2>&1 &
-L=0
-for i in $(seq 1 30); do
-  sleep 1
-  [ "$L" = "0" ] && curl -sf http://127.0.0.1:3000/ >/dev/null 2>&1 && L=1
-  [ "$L" = "1" ] && break
-done
-echo ""
-[ "$L" = "1" ] && ok "后端已启动 :3000" || echo "后端启动失败"
-echo "  停止: bash /storage/emulated/0/Download/kugou-backend-stop.sh"
-''';
-
-  static const _stop = r'''#!/data/data/com.termux/files/usr/bin/bash
-G='\033[0;32m'; Y='\033[1;33m'; N='\033[0m'
-pkill -f KuGouMusicApi && echo -e "${G}✓${N} 已停止" || echo -e "${Y}!${N} 未运行"
-''';
+  static Future<(bool, String)> generateScripts() async => (false, '使用内嵌后端');
+  static Future<bool> startScriptExists() async => false;
+  static Future<String?> getGithubUrl() async => null;
+  static Future<void> setGithubUrl(String _) async {}
 }
