@@ -114,6 +114,47 @@ class BackendManager {
       log('═══ 初始化后端 ═══');
       log('');
 
+      // 先检查是否已解压
+      log('【0/3】检查本地是否已有后端');
+      final installed = await isInstalled();
+      if (installed) {
+        log('已检测到本地后端，跳过下载', LogLevel.ok);
+        log('');
+        log('启动 Node 进程…');
+        final started = await _ch.invokeMethod<bool>('start');
+        if (started != true) { log('启动失败', LogLevel.err); return false; }
+
+        log('等待后端响应 (最多 30 秒)…');
+        final dio0 = Dio(BaseOptions(
+          connectTimeout: const Duration(seconds: 2),
+          receiveTimeout: const Duration(seconds: 2)));
+        bool online0 = false;
+        for (int i = 0; i < 30; i++) {
+          await Future.delayed(const Duration(seconds: 1));
+          try {
+            final r = await dio0.get('http://127.0.0.1:3000/',
+              options: Options(validateStatus: (_) => true));
+            if (r.statusCode != null && r.statusCode! < 500) {
+              online0 = true;
+              log('后端响应正常 (HTTP ${r.statusCode})', LogLevel.ok);
+              break;
+            }
+          } catch (_) {}
+          log('等待中… ${i + 1}s');
+        }
+        _emit(1.0);
+        if (online0) {
+          log('');
+          log('✓✓✓ 后端启动成功 :3000', LogLevel.ok);
+          return true;
+        }
+        log('后端未响应', LogLevel.warn);
+        return false;
+      }
+
+      log('未检测到本地后端，开始下载', LogLevel.info);
+      log('');
+
       // 测速
       log('【0/3】选择最快镜像');
       final mirror = await _fastestMirror();
