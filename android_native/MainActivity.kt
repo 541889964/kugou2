@@ -72,30 +72,37 @@ class MainActivity: FlutterActivity() {
                     "unpackNode" -> {
                         val src = call.argument<String>("src")
                         if (src == null) {
-                            result.error("NO_SRC", "缺少源文件", null); return@setMethodCallHandler
+                            result.error("NO_SRC", "缺少源文件", null)
+                            return@setMethodCallHandler
                         }
-                        try {
-                            unpackTarGz(File(src), File(filesDir, "backend_runtime"))
-                            val binDir = File(filesDir, "backend_runtime/node/bin")
-                            binDir.listFiles()?.forEach { it.setExecutable(true, false) }
-                            result.success(true)
-                        } catch (e: Exception) {
-                            result.error("UNPACK_NODE_FAIL", e.message ?: "解压失败", null)
-                        }
+                        // 后台线程解压，避免 ANR
+                        Thread {
+                            try {
+                                unpackTarGz(File(src), File(filesDir, "backend_runtime"))
+                                val binDir = File(filesDir, "backend_runtime/node/bin")
+                                binDir.listFiles()?.forEach { it.setExecutable(true, false) }
+                                runOnUiThread { result.success(true) }
+                            } catch (e: Exception) {
+                                runOnUiThread { result.error("UNPACK_NODE_FAIL", e.message ?: "解压失败", null) }
+                            }
+                        }.start()
                     }
                     "unpackBackend" -> {
                         val src = call.argument<String>("src")
                         if (src == null) {
-                            result.error("NO_SRC", "缺少源文件", null); return@setMethodCallHandler
+                            result.error("NO_SRC", "缺少源文件", null)
+                            return@setMethodCallHandler
                         }
-                        try {
-                            val dest = File(filesDir, "backend_runtime/backend")
-                            dest.mkdirs()
-                            unpackTarGz(File(src), dest)
-                            result.success(true)
-                        } catch (e: Exception) {
-                            result.error("UNPACK_BACKEND_FAIL", e.message ?: "解压失败", null)
-                        }
+                        Thread {
+                            try {
+                                val dest = File(filesDir, "backend_runtime/backend")
+                                dest.mkdirs()
+                                unpackTarGz(File(src), dest)
+                                runOnUiThread { result.success(true) }
+                            } catch (e: Exception) {
+                                runOnUiThread { result.error("UNPACK_BACKEND_FAIL", e.message ?: "解压失败", null) }
+                            }
+                        }.start()
                     }
                     "unpacked" -> {
                         val node = File(filesDir, "backend_runtime/node/bin/node")
@@ -153,14 +160,18 @@ class MainActivity: FlutterActivity() {
             if (type == 'L') {
                 val data = ByteArray(size.toInt())
                 var r = 0
-                while (r < size) { val n = input.read(data, r, size.toInt() - r); if (n <= 0) break; r += n }
+                while (r < size) {
+                    val n = input.read(data, r, size.toInt() - r)
+                    if (n <= 0) break
+                    r += n
+                }
                 longName = String(data, Charsets.UTF_8).trimEnd('\u0000', ' ')
                 val padding = ((512 - (size % 512)) % 512).toInt()
                 if (padding > 0) input.skip(padding.toLong())
                 continue
             }
 
-            var fullName = longName ?: (if (prefix.isEmpty()) name else "$prefix/$name")
+            val fullName = longName ?: (if (prefix.isEmpty()) name else "$prefix/$name")
             longName = null
 
             val outFile = File(dest, fullName)

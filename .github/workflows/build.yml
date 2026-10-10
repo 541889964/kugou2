@@ -14,12 +14,24 @@ jobs:
       - uses: subosito/flutter-action@v2
         with: {flutter-version: '3.27.1', channel: 'stable', cache: true}
 
+      - name: 检查后端 tar 是否已上传
+        id: check
+        run: |
+          if curl -sfI "https://github.com/541889964/kugou2/releases/download/backend-runtime-v1/node-arm64.tar.gz" >/dev/null 2>&1; then
+            echo "skip_tar=true" >> $GITHUB_OUTPUT
+            echo "✓ 已存在，跳过打包"
+          else
+            echo "skip_tar=false" >> $GITHUB_OUTPUT
+            echo "✗ 不存在，需要打包"
+          fi
+
       - name: 备份 pubspec + assets
         run: |
           cp pubspec.yaml /tmp/ours-pubspec.yaml
           cp -r assets /tmp/ours-assets || true
 
       - name: 下载 Termux Node arm64
+        if: steps.check.outputs.skip_tar == 'false'
         run: |
           set -e
           curl -fL --retry 3 -o /tmp/Packages.gz \
@@ -31,12 +43,11 @@ jobs:
             "https://packages.termux.dev/apt/termux-main/$FILEPATH"
           mkdir -p /tmp/nodex
           dpkg-deb -x /tmp/node.deb /tmp/nodex
-          ls /tmp/nodex/data/data/com.termux/files/usr/bin/
 
       - name: 下载 KuGouMusicApi + npm install
+        if: steps.check.outputs.skip_tar == 'false'
         run: |
           set -e
-          mkdir -p /tmp/kg
           curl -fL --retry 3 -o /tmp/kg.zip \
             "https://gh-proxy.com/https://github.com/MakcRe/KuGouMusicApi/archive/refs/heads/main.zip" \
             || curl -fL --retry 3 -o /tmp/kg.zip \
@@ -48,9 +59,9 @@ jobs:
           cd /tmp/embed/backend
           npm config set registry https://registry.npmmirror.com
           npm install --production --no-audit --no-fund 2>&1 | tail -3
-          du -sh node_modules
 
-      - name: 打包 node + backend
+      - name: 打包并上传 tar.gz（仅首次）
+        if: steps.check.outputs.skip_tar == 'false'
         run: |
           set -e
           mkdir -p /tmp/embed/node
@@ -59,9 +70,16 @@ jobs:
           cd /tmp/embed/node
           find lib -name "*.so*" ! \( -name "libc++*" -o -name "libssl*" -o -name "libcrypto*" -o -name "libz*" -o -name "libicu*" \) -delete || true
           cd /tmp/embed
-          tar --format=ustar -czf $GITHUB_WORKSPACE/node-arm64.tar.gz node
-          tar --format=ustar -czf $GITHUB_WORKSPACE/backend.tar.gz -C backend .
-          ls -lh $GITHUB_WORKSPACE/*.tar.gz
+          tar --format=ustar -czf node-arm64.tar.gz node
+          tar --format=ustar -czf backend.tar.gz -C backend .
+          ls -lh *.tar.gz
+          gh release create backend-runtime-v1 \
+            --title "Backend Runtime v1" \
+            --notes "Node arm64 + KuGouMusicApi (首次编译生成，后续不再更新)" \
+            node-arm64.tar.gz backend.tar.gz || \
+          gh release upload backend-runtime-v1 node-arm64.tar.gz backend.tar.gz --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - run: flutter create --org com.kugou --project-name kugou --platforms=android .
 
@@ -70,7 +88,6 @@ jobs:
           cp /tmp/ours-pubspec.yaml pubspec.yaml
           rm -rf assets
           cp -r /tmp/ours-assets assets
-          ls -lh assets/
 
       - name: 清缓存
         run: |
@@ -96,15 +113,12 @@ jobs:
           mkdir -p out && cp "$APK" out/KuGou.apk
           ls -lh out/
 
-      - name: 上传到 Release
+      - name: 上传 APK 到 Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: KuGou #${{ github.run_number }}
-          files: |
-            out/KuGou.apk
-            node-arm64.tar.gz
-            backend.tar.gz
+          files: out/KuGou.apk
           make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
