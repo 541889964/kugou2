@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,6 +9,7 @@ import '../har_parser.dart';
 import '../local_music.dart';
 import '../mode_manager.dart';
 import '../signature_manager.dart';
+import '../source_manager.dart';
 import '../search_settings.dart';
 import '../updater.dart';
 import 'server_page.dart';
@@ -206,6 +208,7 @@ class _SP extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final mgr = context.watch<ModeManager>();
+    final srcMgr = context.watch<SourceManager>();
     final up = context.watch<Updater>();
     final u = SignatureManager.I.config?['user'] as Map?;
     final hasToken = ((u?['token'] ?? '') as String).isNotEmpty;
@@ -262,6 +265,43 @@ class _SP extends State<SettingsPage> {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.push(context,
               MaterialPageRoute(builder: (_) => const ServerPage()))),
+        ]),
+        const SizedBox(height: 22),
+        _s('内容来源'),
+        _c([
+          ListTile(
+            leading: Container(width: 40, height: 40, decoration: BoxDecoration(
+              color: const Color(0xFF7C6CB0).withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.swap_horiz, color: Color(0xFF9C8FD0), size: 22)),
+            title: const Text('搜索来源', style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(srcMgr.searchLabel, style: const TextStyle(fontSize: 12)),
+            trailing: Switch(
+              value: srcMgr.search == MusicSource.netease,
+              onChanged: (v) => srcMgr.setSearch(v ? MusicSource.netease : MusicSource.concept)),
+          ),
+          const Divider(height: 1),
+          ListTile(
+            leading: Container(width: 40, height: 40, decoration: BoxDecoration(
+              color: const Color(0xFF7C6CB0).withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.explore_outlined, color: Color(0xFF9C8FD0), size: 22)),
+            title: const Text('榜单来源', style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: Text(srcMgr.discoverLabel, style: const TextStyle(fontSize: 12)),
+            trailing: Switch(
+              value: srcMgr.discover == MusicSource.concept,
+              onChanged: (v) => srcMgr.setDiscover(v ? MusicSource.concept : MusicSource.netease)),
+          ),
+        ]),
+        const SizedBox(height: 22),
+        _s('后端部署'),
+        _c([
+          ListTile(
+            leading: Container(width: 40, height: 40, decoration: BoxDecoration(
+              color: Colors.amber.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.terminal, color: Colors.amber, size: 22)),
+            title: const Text('一键生成后端脚本', style: TextStyle(fontWeight: FontWeight.w600)),
+            subtitle: const Text('生成到 Download · Termux 部署', style: TextStyle(fontSize: 12)),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _generate()),
         ]),
         const SizedBox(height: 22),
         _s('后端状态'),
@@ -422,9 +462,16 @@ class _SP extends State<SettingsPage> {
   Widget _s(String t) => Padding(padding: const EdgeInsets.fromLTRB(6, 0, 6, 8),
     child: Text(t, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600,
       letterSpacing: 1.2, color: Colors.white.withOpacity(0.5))));
-  Widget _c(List<Widget> ch) => Container(
-    decoration: BoxDecoration(color: AppTheme.surface,
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: Colors.white.withOpacity(0.05))),
-    child: ClipRRect(borderRadius: BorderRadius.circular(20), child: Column(children: ch)));
+  Widget _c(List<Widget> ch) => ClipRRect(
+    borderRadius: BorderRadius.circular(20),
+    child: BackdropFilter(
+      filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withOpacity(0.14), width: 0.9),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.18),
+            blurRadius: 12, offset: const Offset(0, 4))]),
+        child: Column(children: ch))));
 }

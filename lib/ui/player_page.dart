@@ -68,10 +68,20 @@ class PlayerPage extends StatelessWidget {
               onPressed: () async {
                 if (FloatingLyricService.I.active) {
                   await FloatingLyricService.I.hide();
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('已关闭悬浮歌词')));
                 } else {
                   final ok = await FloatingLyricService.I.show();
-                  if (!ok && context.mounted) ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('需要悬浮窗权限')));
+                  if (!context.mounted) return;
+                  if (ok) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('悬浮歌词已开启')));
+                  } else {
+                    final err = FloatingLyricService.I.lastError;
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(err.isEmpty ? '开启失败，请检查悬浮窗权限' : err),
+                      duration: const Duration(seconds: 4)));
+                  }
                 }
               }),
           ])),

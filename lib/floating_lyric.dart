@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'player.dart';
 
 class FloatingLyricService {
   static final FloatingLyricService I = FloatingLyricService._();
   FloatingLyricService._();
-
   bool _active = false;
   bool get active => _active;
   Timer? _timer;
@@ -18,36 +16,23 @@ class FloatingLyricService {
       final granted = await FlutterOverlayWindow.isPermissionGranted();
       if (!granted) {
         final ok = await FlutterOverlayWindow.requestPermission();
-        if (ok != true) {
-          lastError = '未授予悬浮窗权限，请去系统设置授权';
-          return false;
-        }
+        if (ok != true) { lastError = '未授予悬浮窗权限'; return false; }
       }
       if (_active) return true;
       await FlutterOverlayWindow.showOverlay(
-        height: 160,
-        width: WindowSize.matchParent,
+        height: 92, width: WindowSize.matchParent,
         alignment: OverlayAlignment.bottomCenter,
         flag: OverlayFlag.defaultFlag,
         visibility: NotificationVisibility.visibilityPublic,
-        enableDrag: true,
-        positionGravity: PositionGravity.none,
-        overlayTitle: 'KuGou 歌词',
-        overlayContent: '悬浮歌词',
-      );
-      _active = true;
-      _start();
-      return true;
-    } catch (e) {
-      lastError = '$e';
-      return false;
-    }
+        enableDrag: true, positionGravity: PositionGravity.none,
+        overlayTitle: 'KuGou 歌词', overlayContent: '歌词');
+      _active = true; _start(); return true;
+    } catch (e) { lastError = '$e'; return false; }
   }
 
   Future<void> hide() async {
     try { if (_active) await FlutterOverlayWindow.closeOverlay(); } catch (_) {}
-    _timer?.cancel();
-    _active = false;
+    _timer?.cancel(); _active = false;
   }
 
   void _start() {
@@ -71,14 +56,8 @@ class FloatingLyricService {
       final prog = dur > 0 ? (ms / dur).clamp(0.0, 1.0) : 0.0;
       try {
         await FlutterOverlayWindow.shareData({
-          'cur': cur,
-          'next': next,
-          'title': s.name,
-          'singer': s.singer,
-          'hash': s.hash,
-          'playing': p.playing,
-          'progress': prog,
-        });
+          'cur': cur, 'next': next, 'title': s.name,
+          'playing': p.playing, 'progress': prog});
       } catch (_) {}
     });
   }

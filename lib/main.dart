@@ -3,14 +3,15 @@ import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:provider/provider.dart';
 import 'local_music.dart';
 import 'mode_manager.dart';
-import 'server_manager.dart';
-import 'search_settings.dart';
-import 'wallpaper_manager.dart';
-import 'music_recognition.dart';
 import 'player.dart';
 import 'playlist.dart';
 import 'downloader.dart';
 import 'updater.dart';
+import 'server_manager.dart';
+import 'search_settings.dart';
+import 'source_manager.dart';
+import 'wallpaper_manager.dart';
+import 'music_recognition.dart';
 import 'ui/theme.dart';
 import 'ui/glass.dart';
 import 'ui/splash.dart';
@@ -25,7 +26,7 @@ class _OverlayApp extends StatefulWidget {
 }
 
 class _OA extends State<_OverlayApp> {
-  String _cur = '', _next = '', _title = '', _singer = '';
+  String _cur = '', _next = '', _title = '';
   bool _playing = false;
   double _progress = 0;
 
@@ -38,7 +39,6 @@ class _OA extends State<_OverlayApp> {
           _cur = event['cur']?.toString() ?? '';
           _next = event['next']?.toString() ?? '';
           _title = event['title']?.toString() ?? '';
-          _singer = event['singer']?.toString() ?? '';
           _playing = event['playing'] == true;
           final pr = event['progress'];
           _progress = pr is num ? pr.toDouble().clamp(0.0, 1.0) : 0.0;
@@ -49,88 +49,67 @@ class _OA extends State<_OverlayApp> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
+    return Material(color: Colors.transparent,
       child: GestureDetector(
         onTap: () => FlutterOverlayWindow.shareData('open_player'),
         child: Container(
-          margin: const EdgeInsets.fromLTRB(10, 6, 10, 8),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(20),
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: ClipRRect(borderRadius: BorderRadius.circular(16),
             child: Container(
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft, end: Alignment.bottomRight,
-                  colors: [Color(0xE6201E32), Color(0xE60D0D14)]),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.10), width: 1),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.45), blurRadius: 18, offset: const Offset(0, 6)),
-                  BoxShadow(color: const Color(0xFF7C6CB0).withOpacity(0.25), blurRadius: 24, spreadRadius: -4)]),
-              child: Stack(children: [
-                Positioned(left: 0, top: 0, bottom: 0, width: 3,
-                  child: Container(decoration: const BoxDecoration(
-                    gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                      colors: [Color(0xFF7C6CB0), Color(0xFF5A5480)]),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(20), bottomLeft: Radius.circular(20))))),
-                Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
-                  child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+                color: Colors.black.withOpacity(0.72),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withOpacity(0.10)),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5),
+                  blurRadius: 20, offset: const Offset(0, 6))]),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Padding(padding: const EdgeInsets.fromLTRB(16, 11, 16, 10),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min, children: [
                     Row(children: [
-                      Container(width: 6, height: 6,
+                      Container(width: 5, height: 5,
                         decoration: BoxDecoration(shape: BoxShape.circle,
-                          color: _playing ? Colors.greenAccent : Colors.orangeAccent,
-                          boxShadow: [BoxShadow(
-                            color: (_playing ? Colors.greenAccent : Colors.orangeAccent).withOpacity(0.6),
-                            blurRadius: 6, spreadRadius: 1)])),
+                          color: _playing ? const Color(0xFF22D3EE) : Colors.white38)),
                       const SizedBox(width: 8),
-                      Expanded(child: Text(_singer.isEmpty ? _title : '$_title · $_singer',
-                        maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.55),
-                          fontWeight: FontWeight.w500, letterSpacing: 0.3))),
-                      Icon(_playing ? Icons.graphic_eq : Icons.pause, size: 12,
-                        color: Colors.white.withOpacity(0.4)),
+                      Expanded(child: Text(_title, maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 10.5,
+                          color: Colors.white.withOpacity(0.45)))),
+                      Icon(_playing ? Icons.graphic_eq : Icons.pause,
+                        size: 11, color: Colors.white.withOpacity(0.35)),
                     ]),
-                    const SizedBox(height: 8),
-                    Text(_cur.isEmpty ? '♪ ♪ ♪' : _cur,
-                      maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 18,
-                        fontWeight: FontWeight.w700, letterSpacing: 0.5, height: 1.3,
-                        shadows: [Shadow(color: Color(0xFF7C6CB0), blurRadius: 10),
-                          Shadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 1))])),
-                    if (_next.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4),
+                    const SizedBox(height: 6),
+                    Text(_cur.isEmpty ? '♪' : _cur, maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white, fontSize: 16,
+                        fontWeight: FontWeight.w600, letterSpacing: 0.4, height: 1.3)),
+                    if (_next.isNotEmpty) Padding(
+                      padding: const EdgeInsets.only(top: 3),
                       child: Text(_next, maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: Colors.white.withOpacity(0.45),
-                          fontSize: 12.5, height: 1.3))),
-                    const SizedBox(height: 10),
-                    ClipRRect(borderRadius: BorderRadius.circular(2),
-                      child: SizedBox(height: 2.5, child: LinearProgressIndicator(
-                        value: _progress,
-                        backgroundColor: Colors.white.withOpacity(0.10),
-                        valueColor: const AlwaysStoppedAnimation(Color(0xFF7C6CB0))))),
+                        style: TextStyle(color: Colors.white.withOpacity(0.4),
+                          fontSize: 11.5, height: 1.3))),
                   ])),
-              ]),
-            ),
-          ),
-        ),
-      ),
-    );
+                ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(16), bottomRight: Radius.circular(16)),
+                  child: SizedBox(height: 2, child: LinearProgressIndicator(
+                    value: _progress,
+                    backgroundColor: Colors.white.withOpacity(0.08),
+                    valueColor: const AlwaysStoppedAnimation(Color(0xFF7C6CB0))))),
+              ]))))));
   }
 }
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // 加大图片缓存，避免每次重建都重新解码
   PaintingBinding.instance.imageCache.maximumSize = 400;
   PaintingBinding.instance.imageCache.maximumSizeBytes = 96 << 20;
   bool isOverlay = false;
   try { isOverlay = await FlutterOverlayWindow.isActive(); } catch (_) {}
-  if (isOverlay) {
-    runApp(const _OverlayApp());
-    return;
-  }
+  if (isOverlay) { runApp(const _OverlayApp()); return; }
   await ServerManager.I.init();
   await SearchSettings.I.init();
+  await SourceManager.I.init();
   await WallpaperManager.I.init();
   runApp(const KuGouApp());
 }
@@ -144,11 +123,12 @@ class KuGouApp extends StatelessWidget {
     ChangeNotifierProvider.value(value: PlaylistService.I),
     ChangeNotifierProvider.value(value: Downloader.I),
     ChangeNotifierProvider.value(value: Updater.I),
+    ChangeNotifierProvider.value(value: LocalMusicScanner.I),
     ChangeNotifierProvider.value(value: ServerManager.I),
     ChangeNotifierProvider.value(value: SearchSettings.I),
+    ChangeNotifierProvider.value(value: SourceManager.I),
     ChangeNotifierProvider.value(value: WallpaperManager.I),
     ChangeNotifierProvider.value(value: MusicRecognition.I),
-    ChangeNotifierProvider.value(value: LocalMusicScanner.I),
   ], child: MaterialApp(title: 'KuGou', debugShowCheckedModeBanner: false,
     theme: AppTheme.dark(),
     builder: (context, child) => AppBackground(child: child),

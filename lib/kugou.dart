@@ -1,9 +1,7 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
-import 'mode_manager.dart';
-import 'search_settings.dart';
+import 'net_music.dart';
 import 'signature_manager.dart';
-import 'server_manager.dart';
 
 class Song {
   final String hash, name, singer, album, albumId;
@@ -11,12 +9,14 @@ class Song {
   final String? cover, audioId;
   final String? localPath;
   final bool isLocal;
+  final String source;
   Song({required this.hash, required this.name, required this.singer,
     this.album = '', this.albumId = '', this.duration = 0,
-    this.cover, this.audioId, this.localPath, this.isLocal = false});
+    this.cover, this.audioId, this.localPath, this.isLocal = false,
+    this.source = 'concept'});
   String get title => singer.isEmpty ? name : '$name - $singer';
   Map<String,dynamic> toJson() => {'hash':hash,'name':name,'singer':singer,
-    'album':album,'albumId':albumId,'duration':duration,'cover':cover,'audioId':audioId};
+    'album':album,'albumId':albumId,'duration':duration,'cover':cover,'audioId':audioId,'source':source};
   factory Song.fromJson(Map j) => Song(
     hash: (j['hash'] ?? j['FileHash'] ?? '').toString(),
     name: (j['name'] ?? j['songname'] ?? j['SongName'] ?? '未知').toString(),
@@ -26,43 +26,8 @@ class Song {
     duration: int.tryParse('${j['duration'] ?? j['Duration'] ?? 0}') ?? 0,
     cover: (j['cover'] ?? j['Image'] ?? '').toString().isEmpty ? null : (j['cover'] ?? j['Image']).toString(),
     audioId: (j['audioId'] ?? j['MixSongID'] ?? j['EMixSongID'] ?? '').toString().isEmpty
-      ? null : (j['audioId'] ?? j['MixSongID'] ?? j['EMixSongID']).toString());
-}
-
-/// 网易云歌词 API（无需登录）
-class NeteaseApi {
-  static final _dio = Dio(BaseOptions(
-    connectTimeout: const Duration(seconds: 8),
-    receiveTimeout: const Duration(seconds: 12),
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36',
-      'Referer': 'https://music.163.com/',
-    },
-  ));
-
-  static Future<String?> getLyric(String songName, String singer) async {
-    try {
-      final kw = '$songName ${singer.isEmpty ? "" : singer}'.trim();
-      // 1. 搜索
-      final sr = await _dio.get('https://music.163.com/api/search/get/web',
-        queryParameters: {'s': kw, 'type': 1, 'offset': 0, 'total': 'true', 'limit': 8});
-      final sd = sr.data is String ? jsonDecode(sr.data) : sr.data;
-      final songs = sd?['result']?['songs'] as List?;
-      if (songs == null || songs.isEmpty) return null;
-
-      // 2. 逐个尝试拿歌词（第一个可能没歌词）
-      for (int i = 0; i < songs.length && i < 3; i++) {
-        final id = songs[i]['id'];
-        if (id == null) continue;
-        final lr = await _dio.get('https://music.163.com/api/song/lyric',
-          queryParameters: {'id': id, 'lv': -1, 'kv': -1, 'tv': -1});
-        final ld = lr.data is String ? jsonDecode(lr.data) : lr.data;
-        final lrc = ld?['lrc']?['lyric'] as String?;
-        if (lrc != null && lrc.trim().isNotEmpty) return lrc;
-      }
-      return null;
-    } catch (_) { return null; }
-  }
+      ? null : (j['audioId'] ?? j['MixSongID'] ?? j['EMixSongID']).toString(),
+    source: (j['source'] ?? 'concept').toString());
 }
 
 class KuGouApi {
@@ -72,12 +37,9 @@ class KuGouApi {
     connectTimeout: const Duration(seconds: 15),
     receiveTimeout: const Duration(seconds: 20)));
   String? lastError;
-  String get _base {
-    final local = ModeManager.I.backendUrl;
-    return ServerManager.I.effectiveBaseUrl(localUrl: local);
-  }
+  String get _base => 'http://127.0.0.1:3000';
   String get _cookie {
-    final u = SignatureManager.I.config!['user'] as Map;
+    final u = SignatureManager.I.config?['user'] as Map? ?? {};
     return <String>[
       if ((u['token'] ?? '').toString().isNotEmpty) 'token=${u['token']}',
       if ((u['userid'] ?? '').toString().isNotEmpty) 'userid=${u['userid']}',
@@ -89,19 +51,54 @@ class KuGouApi {
     ].join('; ');
   }
 
-  Future<List<Song>> search(String kw, {int page = 1, int? pagesize}) async {
-    final size = pagesize ?? SearchSettings.I.pageSize;
+  Future<List<Song>> searchConcept(String kw, {int pagesize = 30}) async {
     lastError = null;
     try {
       final r = await _dio.get('$_base/search',
-        queryParameters: {'keywords': kw, 'type': 'song', 'page': page, 'pagesize': size},
+        queryParameters: {'keywords': kw, 'type': 'song', 'page': 1, 'pagesize': pagesize},
         options: Options(headers: {'Cookie': _cookie}));
       final d = r.data is String ? jsonDecode(r.data) : r.data;
       final lists = (d['data']?['lists'] ?? d['data']?['info'] ?? []) as List;
-      return lists.whereType<Map>()
-        .map((e) => Song.fromJson(Map<String,dynamic>.from(e)))
-        .where((s) => s.hash.isNotEmpty).toList();
-    } catch (e) { lastError = '后端未启动: $e'; return []; }
+      return lists.whereType<Map>().map((e) {
+        final s = Song.fromJson(Map<String,dynamic>.from(e));
+        return Song(hash: s.hash, name: s.name, singer: s.singer, album: s.album,
+          albumId: s.albumId, duration: s.duration, cover: s.cover,
+          audioId: s.audioId, source: 'concept');
+      }).where((s) => s.hash.isNotEmpty).toList();
+    } catch (e) {
+      lastError = '概念版未启动: $e';
+      return [];
+    }
+  }
+
+  Future<List<Song>> searchNetease(String kw, {int pagesize = 30}) async {
+    lastError = null;
+    final results = await NetMusic.search(kw, limit: pagesize);
+    if (results.isEmpty) { lastError = '网易云未返回结果'; return []; }
+    return results.map((m) => Song(
+      hash: 'netease_${m['id']}',
+      name: m['name'].toString(),
+      singer: m['artist'].toString(),
+      album: m['album'].toString(),
+      duration: (m['duration'] as num?)?.toInt() ?? 0,
+      source: 'netease',
+    )).toList();
+  }
+
+  Future<List<Song>> search(String kw, {int page = 1, int? pagesize, String? source}) async {
+    final size = pagesize ?? 30;
+    if (source == 'netease') return searchNetease(kw, pagesize: size);
+    return searchConcept(kw, pagesize: size);
+  }
+
+  Future<Song?> resolveNetease(Song s) async {
+    final kw = s.singer.isEmpty ? s.name : '${s.name} ${s.singer}';
+    final list = await searchConcept(kw, pagesize: 5);
+    if (list.isEmpty) return null;
+    for (final x in list) {
+      if (x.name.contains(s.name) || s.name.contains(x.name)) return x;
+    }
+    return list.first;
   }
 
   Future<Map?> getSongUrl(String hash, {String albumId = '', String? audioId}) async {
@@ -118,37 +115,17 @@ class KuGouApi {
         if (u is List && u.isNotEmpty) return {'url': u[0].toString()};
         final bu = d['backupUrl'] ?? d['data']?['backupUrl'];
         if (bu is List && bu.isNotEmpty) return {'url': bu[0].toString()};
-        if (d['error_code'] == 20018) return {'error':'VIP_ONLY','message':'切到概念版试试'};
+        if (d['error_code'] == 20018) return {'error':'VIP_ONLY','message':'VIP 权限不足'};
       }
       return {'error':'NO_URL','message':'未返回 URL'};
     } catch (e) { return {'error':'BACKEND_ERR','message':'后端请求失败: $e'}; }
   }
 
-  /// 歌词：网易云优先 → 酷狗后端兜底
   Future<String?> getLyric(String hash, {int duration = 0, String? songName, String? singer}) async {
-    // 1. 概念版（优先）
-    final concept = await _tryLyricFrom(ModeManager.I.isLite ? 'http://127.0.0.1:3000' : 'http://127.0.0.1:3001',
-      hash, duration: duration);
-    if (concept != null) return concept;
-
-    // 2. 普通版（如果当前是概念版，再试普通版）
-    if (ModeManager.I.isLite) {
-      final std = await _tryLyricFrom('http://127.0.0.1:3001', hash, duration: duration);
-      if (std != null) return std;
-    }
-
-    // 3. 网易云（带歌名+歌手）
     if (songName != null && songName.trim().isNotEmpty) {
-      try {
-        final nj = await NeteaseApi.getLyric(songName, singer ?? '');
-        if (nj != null && nj.trim().isNotEmpty) return nj;
-      } catch (_) {}
+      final nj = await NetMusic.lyric(songName, singer ?? '');
+      if (nj != null && nj.trim().length > 10) return nj;
     }
-
-    return null;
-  }
-
-  Future<String?> _tryLyricFrom(String base, String hash, {int duration = 0}) async {
     final tries = <Map<String, dynamic>>[
       {'p': '/lyric', 'q': {'hash': hash, 'id': hash, 'duration': duration, 'decode': 'true', 'fmt': 'lrc'}},
       {'p': '/lyric', 'q': {'hash': hash, 'id': hash}},
@@ -156,20 +133,18 @@ class KuGouApi {
     ];
     for (final t in tries) {
       try {
-        final r = await _dio.get('$base${t['p']}',
+        final r = await _dio.get('$_base${t['p']}',
           queryParameters: (t['q'] as Map).map((k, v) => MapEntry(k.toString(), v.toString())),
           options: Options(headers: {'Cookie': _cookie}));
         final data = r.data is String ? _tryJson(r.data as String) : r.data;
         final txt = _pickLyric(data);
-        if (txt != null && txt.trim().isNotEmpty) return txt;
+        if (txt != null && txt.trim().length > 10) return txt;
       } catch (_) {}
     }
     return null;
   }
 
-  dynamic _tryJson(String s) {
-    try { return jsonDecode(s); } catch (_) { return s; }
-  }
+  dynamic _tryJson(String s) { try { return jsonDecode(s); } catch (_) { return s; } }
   String? _pickLyric(dynamic d) {
     if (d == null) return null;
     if (d is String) {
@@ -188,27 +163,21 @@ class KuGouApi {
         final v = d[k];
         if (v is String && v.trim().isNotEmpty) {
           final r = _pickLyric(v);
-          if (r != null && r.trim().isNotEmpty) return r;
+          if (r != null && r.trim().length > 10) return r;
         }
       }
       for (final k in const ['data','result','candidates','list','info']) {
-        if (d.containsKey(k)) {
-          final r = _pickLyric(d[k]);
-          if (r != null && r.trim().isNotEmpty) return r;
-        }
+        if (d.containsKey(k)) { final r = _pickLyric(d[k]); if (r != null) return r; }
       }
     }
     if (d is List) {
-      for (final e in d) {
-        final r = _pickLyric(e);
-        if (r != null && r.trim().isNotEmpty) return r;
-      }
+      for (final e in d) { final r = _pickLyric(e); if (r != null) return r; }
     }
     return null;
   }
 
   Future<bool> verifyCookie() async {
-    final u = SignatureManager.I.config!['user'] as Map;
+    final u = SignatureManager.I.config?['user'] as Map? ?? {};
     return (u['token'] ?? '').toString().length >= 20;
   }
 }

@@ -32,22 +32,16 @@ class PlayerService extends ChangeNotifier {
   bool get playing => player.playing;
 
   PlayerService._() {
-    // 关键修复：用 Timer 每 200ms 轮询，不依赖 stream，100% 能触发
     _ticker = Timer.periodic(const Duration(milliseconds: 250), (_) => _tick());
-    // 流只用来快速响应 playing 变化
     player.playerStateStream.listen((_) => notifyListeners());
   }
 
   void _tick() {
-    final newPos = player.position;
-    final newDur = player.duration ?? Duration.zero;
-    final posChanged = (newPos - _pos).abs() > const Duration(milliseconds: 90);
-    final durChanged = newDur != _dur;
-    if (!posChanged && !durChanged) return;
-    _pos = newPos;
-    _dur = newDur;
-    _updateLyric();
-    _checkComplete();
+    final np = player.position;
+    final nd = player.duration ?? Duration.zero;
+    if ((np - _pos).abs() < const Duration(milliseconds: 90) && nd == _dur) return;
+    _pos = np; _dur = nd;
+    _updateLyric(); _checkComplete();
     notifyListeners();
   }
 
@@ -56,16 +50,10 @@ class PlayerService extends ChangeNotifier {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now < _cooldownUntil) return;
     if (queue.isEmpty) return;
-    final dur = player.duration;
-    if (dur == null || dur.inMilliseconds == 0) return;
-
-    final proc = player.processingState;
-    final posMs = player.position.inMilliseconds;
-    final durMs = dur.inMilliseconds;
-    final completed = proc == ProcessingState.completed;
-    final atEnd = posMs >= durMs - 400;
-
-    if (completed || atEnd) {
+    final d = player.duration;
+    if (d == null || d.inMilliseconds == 0) return;
+    if (player.processingState == ProcessingState.completed ||
+        player.position.inMilliseconds >= d.inMilliseconds - 400) {
       _cooldownUntil = now + 1500;
       _onComplete();
     }
@@ -78,27 +66,19 @@ class PlayerService extends ChangeNotifier {
       if (queue.isEmpty) return;
       switch (_mode) {
         case PlayMode.single:
-          await player.seek(Duration.zero);
-          await player.play();
-          break;
+          await player.seek(Duration.zero); await player.play(); break;
         case PlayMode.shuffle:
           if (queue.length > 1) {
-            final r = Random();
-            int n;
+            final r = Random(); int n;
             do { n = r.nextInt(queue.length); } while (n == idx);
             idx = n;
           } else { idx = 0; }
-          await _load();
-          break;
+          await _load(); break;
         case PlayMode.order:
           idx = (idx < queue.length - 1) ? idx + 1 : 0;
-          await _load();
-          break;
+          await _load(); break;
       }
-    } catch (_) {
-    } finally {
-      _handlingComplete = false;
-    }
+    } finally { _handlingComplete = false; }
   }
 
   void cycleMode() {
@@ -166,7 +146,16 @@ class PlayerService extends ChangeNotifier {
         await _loadLocalLyric(s.localPath!);
         loading = false; notifyListeners(); return;
       }
-      final r = await KuGouApi.I.getSongUrl(s.hash, albumId: s.albumId, audioId: s.audioId);
+      Song real = s;
+      if (s.source == 'netease' || s.hash.startsWith('netease_')) {
+        final kg = await KuGouApi.I.resolveNetease(s);
+        if (kg == null) {
+          errorMsg = '酷狗未找到同名歌曲'; loading = false; notifyListeners(); return;
+        }
+        real = kg;
+        if (idx >= 0 && idx < queue.length) queue[idx] = kg;
+      }
+      final r = await KuGouApi.I.getSongUrl(real.hash, albumId: real.albumId, audioId: real.audioId);
       if (r == null || r['error'] != null) {
         errorMsg = r?['message']?.toString() ?? '失败';
         loading = false; notifyListeners(); return;
@@ -175,18 +164,14 @@ class PlayerService extends ChangeNotifier {
       if (url == null || url.isEmpty) { errorMsg = '空链接'; loading = false; notifyListeners(); return; }
       await player.setUrl(url);
       await player.play();
-      // 歌词：网易云优先，酷狗兜底
-      KuGouApi.I.getLyric(s.hash, duration: s.duration, songName: s.name, singer: s.singer).then((l) {
+      KuGouApi.I.getLyric(real.hash, duration: real.duration,
+        songName: real.name, singer: real.singer).then((l) {
         lyric = l;
         lyricLines = (l == null || l.isEmpty) ? [] : LyricParser.parse(l);
-        currentLyricIndex = 0;
-        notifyListeners();
+        currentLyricIndex = 0; notifyListeners();
       });
-    } catch (e) {
-      errorMsg = '失败: $e';
-    } finally {
-      loading = false; notifyListeners();
-    }
+    } catch (e) { errorMsg = '失败: $e'; }
+    finally { loading = false; notifyListeners(); }
   }
 
   Future<void> _loadLocalLyric(String audioPath) async {
@@ -201,9 +186,7 @@ class PlayerService extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> toggle() async {
-    if (player.playing) await player.pause(); else await player.play();
-  }
+  Future<void> toggle() async { if (player.playing) await player.pause(); else await player.play(); }
   Future<void> next() async {
     if (queue.isEmpty) return;
     if (_mode == PlayMode.shuffle && queue.length > 1) {
