@@ -25,7 +25,7 @@ class SettingsPage extends StatefulWidget {
   State<SettingsPage> createState() => _SP();
 }
 class _SP extends State<SettingsPage> {
-  bool _importing = false, _generating = false, _hasStart = false;
+  bool _importing = false;
   bool _liteOn = false, _checking = false;
   String _verifyMsg = '';
 
@@ -57,34 +57,6 @@ class _SP extends State<SettingsPage> {
     } catch (e) { setState(() => _importing = false); _toast('失败: $e'); }
   }
 
-  Future<void> _generate() async {
-    setState(() => _generating = true);
-    final (ok, msg) = await BackendManager.generateScripts();
-    if (!mounted) return;
-    setState(() { _generating = false; _hasStart = ok; });
-    if (ok) {
-      showDialog(context: context, builder: (_) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('脚本已生成'),
-        content: Column(mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('在 Termux 里运行：', style: TextStyle(fontSize: 12)),
-          const SizedBox(height: 8),
-          Container(padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: Colors.black.withOpacity(0.35),
-              borderRadius: BorderRadius.circular(8)),
-            child: SelectableText(BackendManager.startCmd,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 11, color: AppTheme.s))),
-        ]),
-        actions: [
-          TextButton(onPressed: () {
-            Clipboard.setData(ClipboardData(text: BackendManager.startCmd));
-            Navigator.pop(context); _toast('已复制');
-          }, child: const Text('复制')),
-          FilledButton(onPressed: () => Navigator.pop(context), child: const Text('好'))]));
-    } else { _toast(msg); }
-  }
 
   void _verify() {
     final u = SignatureManager.I.config?['user'] as Map?;
