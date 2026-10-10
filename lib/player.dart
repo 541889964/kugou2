@@ -25,6 +25,7 @@ class PlayerService extends ChangeNotifier {
   Timer? _ticker;
   bool _handlingComplete = false;
   int _cooldownUntil = 0;
+  double volume = 1.0;
 
   Song? get current => (idx >= 0 && idx < queue.length) ? queue[idx] : null;
   Duration get position => _pos;
@@ -186,7 +187,9 @@ class PlayerService extends ChangeNotifier {
     } catch (_) {}
   }
 
-  Future<void> toggle() async { if (player.playing) await player.pause(); else await player.play(); }
+  Future<void> toggle() async {
+    if (player.playing) await player.pause(); else await player.play();
+  }
   Future<void> next() async {
     if (queue.isEmpty) return;
     if (_mode == PlayMode.shuffle && queue.length > 1) {
@@ -204,4 +207,9 @@ class PlayerService extends ChangeNotifier {
     await _load();
   }
   Future<void> seek(Duration d) => player.seek(d);
+  Future<void> setVolume(double v) async {
+    volume = v.clamp(0.0, 1.0);
+    await player.setVolume(volume);
+    notifyListeners();
+  }
 }

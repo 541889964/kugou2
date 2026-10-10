@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +13,7 @@ import '../source_manager.dart';
 import '../updater.dart';
 import 'server_page.dart';
 import 'wallpaper_page.dart';
+import 'downloads_page.dart';
 import '../wallpaper_manager.dart';
 import 'theme.dart';
 import 'glass.dart';
@@ -25,8 +25,7 @@ class SettingsPage extends StatefulWidget {
 }
 class _SP extends State<SettingsPage> {
   bool _importing = false, _generating = false, _hasStart = false;
-  bool _liteOn = false, _stdOn = false, _checking = false;
-  String? _githubUrl;
+  bool _liteOn = false, _checking = false;
   String _verifyMsg = '';
 
   @override
@@ -35,27 +34,18 @@ class _SP extends State<SettingsPage> {
   Future<void> _refresh() async {
     final s = await BackendManager.startScriptExists();
     final l = await BackendManager.isLiteOnline();
-    final g = await BackendManager.getGithubUrl();
     if (!mounted) return;
-    setState(() { _hasStart = s; _liteOn = l; _stdOn = l; _githubUrl = g; });
+    setState(() { _hasStart = s; _liteOn = l; });
   }
 
   Future<void> _pickFile() async {
     setState(() => _importing = true);
     try {
-      final r = await FilePicker.platform.pickFiles(type: FileType.any, allowMultiple: false);
+      final r = await FilePicker.platform.pickFiles(type: FileType.any);
       if (r == null || r.files.isEmpty || r.files.single.path == null) {
         setState(() => _importing = false); return;
       }
-      await _parseFile(r.files.single.path!);
-    } catch (e) { setState(() => _importing = false); _toast('失败: $e'); }
-  }
-
-  Future<void> _parseFile(String path) async {
-    try {
-      final f = File(path);
-      if (!await f.exists()) { setState(() => _importing = false); _toast('文件不存在'); return; }
-      final m = HarParser.parse(await f.readAsString());
+      final m = HarParser.parse(await File(r.files.single.path!).readAsString());
       if (m.isEmpty || !HarParser.isValid(m)) {
         setState(() => _importing = false);
         _toast(m.isEmpty ? '未找到 Cookie 字段' : '字段不完整'); return;
@@ -63,7 +53,7 @@ class _SP extends State<SettingsPage> {
       await SignatureManager.I.updateUser(m);
       setState(() => _importing = false);
       _toast('✓ 导入成功');
-    } catch (e) { setState(() => _importing = false); _toast('解析失败: $e'); }
+    } catch (e) { setState(() => _importing = false); _toast('失败: $e'); }
   }
 
   Future<void> _generate() async {
@@ -76,7 +66,8 @@ class _SP extends State<SettingsPage> {
         backgroundColor: AppTheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('脚本已生成'),
-        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+        content: Column(mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start, children: [
           const Text('在 Termux 里运行：', style: TextStyle(fontSize: 12)),
           const SizedBox(height: 8),
           Container(padding: const EdgeInsets.all(10),
@@ -88,14 +79,13 @@ class _SP extends State<SettingsPage> {
         actions: [
           TextButton(onPressed: () {
             Clipboard.setData(ClipboardData(text: BackendManager.startCmd));
-            Navigator.pop(context);
-            _toast('已复制');
+            Navigator.pop(context); _toast('已复制');
           }, child: const Text('复制')),
           FilledButton(onPressed: () => Navigator.pop(context), child: const Text('好'))]));
     } else { _toast(msg); }
   }
 
-  Future<void> _verify() async {
+  void _verify() {
     final u = SignatureManager.I.config?['user'] as Map?;
     final t = (u?['token'] ?? '').toString();
     setState(() => _verifyMsg = t.length >= 20 ? '✓ 已导入' : '✗ 未导入');
@@ -147,7 +137,7 @@ class _SP extends State<SettingsPage> {
               leading: const IconTile(icon: Icons.file_upload_outlined,
                 c1: AppTheme.p, c2: AppTheme.accent),
               title: const Text('导入 HAR', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-              subtitle: const Text('从 Reqable 导出', style: const TextStyle(fontSize: 11.5)),
+              subtitle: const Text('从 Reqable 导出', style: TextStyle(fontSize: 11.5)),
               trailing: _importing ? const SizedBox(width: 20, height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.chevron_right),
               onTap: _importing ? null : _pickFile),
@@ -163,15 +153,6 @@ class _SP extends State<SettingsPage> {
               value: srcMgr.search == MusicSource.netease,
               activeColor: AppTheme.p,
               onChanged: (v) => srcMgr.setSearch(v ? MusicSource.netease : MusicSource.concept)),
-            const Divider(height: 1),
-            SwitchListTile(
-              secondary: const IconTile(icon: Icons.explore_outlined,
-                c1: AppTheme.s, c2: const Color(0xFF0EA5E9)),
-              title: const Text('榜单来源', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-              subtitle: Text(srcMgr.discoverLabel, style: const TextStyle(fontSize: 11.5)),
-              value: srcMgr.discover == MusicSource.concept,
-              activeColor: AppTheme.p,
-              onChanged: (v) => srcMgr.setDiscover(v ? MusicSource.concept : MusicSource.netease)),
           ]),
           const SizedBox(height: 20),
 
@@ -204,13 +185,13 @@ class _SP extends State<SettingsPage> {
           ]),
           const SizedBox(height: 20),
 
-          _label('后端'),
+          _label('后端与下载'),
           _card([
             ListTile(
               leading: const IconTile(icon: Icons.dns_outlined,
                 c1: AppTheme.p, c2: const Color(0xFF0EA5E9)),
               title: const Text('服务器共享', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-              subtitle: const Text('用户名/密码本地保存 · 生成分享 ID', style: TextStyle(fontSize: 11.5)),
+              subtitle: const Text('本地/远程 · 生成分享 ID', style: TextStyle(fontSize: 11.5)),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const ServerPage()))),
@@ -219,11 +200,20 @@ class _SP extends State<SettingsPage> {
               leading: const IconTile(icon: Icons.terminal,
                 c1: const Color(0xFFF59E0B), c2: AppTheme.accent),
               title: const Text('生成后端脚本', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-              subtitle: Text(_hasStart ? '已生成 · 点击重生成' : '生成到 Download · Termux 部署',
+              subtitle: Text(_hasStart ? '已生成 · 点击重生成' : '生成到 Download',
                 style: const TextStyle(fontSize: 11.5)),
               trailing: _generating ? const SizedBox(width: 20, height: 20,
                 child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.chevron_right),
               onTap: _generating ? null : _generate),
+            const Divider(height: 1),
+            ListTile(
+              leading: const IconTile(icon: Icons.download_outlined,
+                c1: const Color(0xFF10B981), c2: AppTheme.s),
+              title: const Text('下载管理', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+              subtitle: const Text('查看下载进度和文件', style: TextStyle(fontSize: 11.5)),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const DownloadsPage()))),
             const Divider(height: 1),
             ListTile(
               leading: const IconTile(icon: Icons.diamond_outlined,
@@ -262,14 +252,6 @@ class _SP extends State<SettingsPage> {
                 child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.chevron_right),
               onTap: up.checking ? null : () => Updater.I.check()),
-            const Divider(height: 1),
-            ListTile(
-              leading: const IconTile(icon: Icons.description_outlined,
-                c1: AppTheme.s, c2: const Color(0xFF0EA5E9)),
-              title: Text('签名版本 v${SignatureManager.I.version}',
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-              subtitle: Text('来源: ${SignatureManager.I.source}', style: const TextStyle(fontSize: 11.5)),
-            ),
           ]),
           const SizedBox(height: 32),
           Center(child: Text('⚠️ 仅供个人学习研究',
@@ -284,7 +266,6 @@ class _SP extends State<SettingsPage> {
     child: Text(t, style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700,
       letterSpacing: 1.5, color: Colors.white.withOpacity(0.5))));
 
-  Widget _card(List<Widget> ch) => GlassCard(
-    radius: 20, padding: EdgeInsets.zero, heavy: true,
+  Widget _card(List<Widget> ch) => GlassCard(radius: 20, padding: EdgeInsets.zero, heavy: true,
     child: Column(children: ch));
 }

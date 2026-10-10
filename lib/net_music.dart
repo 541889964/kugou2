@@ -18,10 +18,10 @@ class NetMusic {
     '原创榜': 2884035,
   };
 
-  static Future<List<Map<String, dynamic>>> search(String kw, {int limit = 30}) async {
+  static Future<List<Map<String, dynamic>>> search(String kw, {int limit = 30, int offset = 0}) async {
     try {
       final r = await _dio.get('https://music.163.com/api/search/get/web',
-        queryParameters: {'s': kw, 'type': 1, 'offset': 0, 'total': 'true', 'limit': limit});
+        queryParameters: {'s': kw, 'type': 1, 'offset': offset, 'total': 'true', 'limit': limit});
       final d = r.data is String ? jsonDecode(r.data) : r.data;
       final songs = (d?['result']?['songs'] ?? []) as List;
       return songs.map<Map<String, dynamic>>((t) {
@@ -66,7 +66,7 @@ class NetMusic {
       final d = r.data is String ? jsonDecode(r.data) : r.data;
       final list = (d?['recommend'] ?? d?['data']?['dailySongs'] ?? []) as List;
       if (list.isNotEmpty) {
-        return list.take(30).map<Map<String, dynamic>>((t) {
+        return list.take(50).map<Map<String, dynamic>>((t) {
           final artists = t['artists'] as List?;
           final ar = artists != null && artists.isNotEmpty
             ? artists.map((a) => a['name']).join('/') : '';
@@ -80,7 +80,7 @@ class NetMusic {
         }).toList();
       }
     } catch (_) {}
-    return rankSongs(3779629, limit: 30);
+    return rankSongs(3779629, limit: 50);
   }
 
   static Future<String?> lyric(String name, String artist) async {

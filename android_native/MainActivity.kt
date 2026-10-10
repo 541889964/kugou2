@@ -19,8 +19,7 @@ class MainActivity: FlutterActivity() {
                     "start" -> {
                         val path = call.argument<String>("path")
                         if (path == null) {
-                            result.error("NO_PATH", "缺少路径", null)
-                            return@setMethodCallHandler
+                            result.error("NO_PATH", "缺少路径", null); return@setMethodCallHandler
                         }
                         try {
                             recorder?.release()
@@ -43,17 +42,15 @@ class MainActivity: FlutterActivity() {
                             outputPath = path
                             result.success(true)
                         } catch (e: Exception) {
-                            result.error("START_FAIL", e.message ?: "启动录音失败", null)
+                            result.error("START_FAIL", e.message ?: "启动失败", null)
                         }
                     }
                     "stop" -> {
                         try {
-                            recorder?.stop()
-                            recorder?.release()
-                            recorder = null
+                            recorder?.stop(); recorder?.release(); recorder = null
                             result.success(outputPath)
                         } catch (e: Exception) {
-                            result.error("STOP_FAIL", e.message ?: "停止录音失败", null)
+                            result.error("STOP_FAIL", e.message ?: "停止失败", null)
                         }
                     }
                     "hasPermission" -> result.success(true)

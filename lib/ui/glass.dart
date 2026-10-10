@@ -14,7 +14,6 @@ class AppBackground extends StatelessWidget {
       Positioned.fill(child: RepaintBoundary(child: AnimatedSwitcher(
         duration: const Duration(milliseconds: 520),
         switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeInCubic,
         transitionBuilder: (c, a) => FadeTransition(opacity: a, child: c),
         child: Image.asset(wp, key: ValueKey(wp), fit: BoxFit.cover,
           filterQuality: FilterQuality.low,
@@ -22,11 +21,7 @@ class AppBackground extends StatelessWidget {
       Positioned.fill(child: Container(
         decoration: BoxDecoration(gradient: LinearGradient(
           begin: Alignment.topCenter, end: Alignment.bottomCenter,
-          colors: [
-            AppTheme.bg.withOpacity(0.35),
-            AppTheme.bg.withOpacity(0.65),
-            AppTheme.bg.withOpacity(0.85),
-          ])))),
+          colors: [AppTheme.bg.withOpacity(0.35), AppTheme.bg.withOpacity(0.70), AppTheme.bg.withOpacity(0.88)])))),
       if (child != null) child!,
     ]);
   }
@@ -38,34 +33,22 @@ class GlassCard extends StatelessWidget {
   final double radius;
   final VoidCallback? onTap;
   final bool heavy;
-  final Color? tint;
-  final Gradient? gradientBorder;
   const GlassCard({super.key, required this.child, this.margin, this.padding,
-    this.radius = 20, this.onTap, this.heavy = false, this.tint, this.gradientBorder});
-
+    this.radius = 20, this.onTap, this.heavy = false});
   @override
   Widget build(BuildContext context) {
-    final base = (tint ?? Colors.white).withOpacity(heavy ? 0.10 : 0.06);
+    final base = Colors.white.withOpacity(heavy ? 0.10 : 0.06);
     Widget inner = Container(
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-          colors: [base, base.withOpacity(base.a * 0.55)]),
+        color: base,
         borderRadius: BorderRadius.circular(radius),
         border: Border.all(color: Colors.white.withOpacity(0.12), width: 0.8),
-        boxShadow: heavy
-          ? [BoxShadow(color: Colors.black.withOpacity(0.35),
-              blurRadius: 20, offset: const Offset(0, 8)),
-             BoxShadow(color: AppTheme.p.withOpacity(0.10),
-              blurRadius: 30, spreadRadius: -8)]
-          : null),
-      padding: padding,
-      child: child);
+        boxShadow: heavy ? [BoxShadow(color: Colors.black.withOpacity(0.30),
+          blurRadius: 18, offset: const Offset(0, 6))] : null),
+      padding: padding, child: child);
     if (heavy) {
       inner = ClipRRect(borderRadius: BorderRadius.circular(radius),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-          child: inner));
+        child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22), child: inner));
     }
     if (onTap != null) {
       inner = Material(color: Colors.transparent, child: InkWell(
@@ -77,7 +60,6 @@ class GlassCard extends StatelessWidget {
   }
 }
 
-/// 彩色圆形图标底座
 class IconTile extends StatelessWidget {
   final IconData icon;
   final Color c1, c2;
@@ -87,10 +69,8 @@ class IconTile extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: size, height: size,
     decoration: BoxDecoration(
-      gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
-        colors: [c1, c2]),
-      borderRadius: BorderRadius.circular(size * 0.32),
-      boxShadow: [BoxShadow(color: c1.withOpacity(0.35),
-        blurRadius: 14, offset: const Offset(0, 6))]),
-    child: Icon(icon, color: Colors.white, size: size * 0.5));
+      gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [c1, c2]),
+      borderRadius: BorderRadius.circular(size * 0.30),
+      boxShadow: [BoxShadow(color: c1.withOpacity(0.35), blurRadius: 12, offset: const Offset(0, 5))]),
+    child: Icon(icon, color: Colors.white, size: size * 0.48));
 }

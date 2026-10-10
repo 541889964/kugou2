@@ -17,8 +17,9 @@ class LyricParser {
         final min = int.tryParse(m.group(1)!) ?? 0;
         final sec = int.tryParse(m.group(2)!) ?? 0;
         final msPart = m.group(3);
-        final msValue = msPart != null ? int.tryParse(msPart.padRight(3, '0').substring(0, 3)) ?? 0 : 0;
-        lines.add(LyricLine(min * 60000 + sec * 1000 + msValue, text));
+        final msVal = msPart != null
+          ? int.tryParse(msPart.padRight(3, '0').substring(0, 3)) ?? 0 : 0;
+        lines.add(LyricLine(min * 60000 + sec * 1000 + msVal, text));
       }
     }
     lines.sort((a, b) => a.time.compareTo(b.time));

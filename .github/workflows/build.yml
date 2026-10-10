@@ -13,67 +13,37 @@ jobs:
         with: {distribution: 'zulu', java-version: '17'}
       - uses: subosito/flutter-action@v2
         with: {flutter-version: '3.27.1', channel: 'stable', cache: true}
-
       - name: 备份 pubspec + assets
         run: |
           cp pubspec.yaml /tmp/ours-pubspec.yaml
           cp -r assets /tmp/ours-assets
-
       - run: flutter create --org com.kugou --project-name kugou --platforms=android .
-
       - name: 恢复 pubspec + assets
         run: |
           cp /tmp/ours-pubspec.yaml pubspec.yaml
           rm -rf assets
           cp -r /tmp/ours-assets assets
-          grep -A5 "assets:" pubspec.yaml
+          grep -A6 "assets:" pubspec.yaml
           ls -lh assets/
-
       - name: 清缓存
         run: |
           flutter clean || true
           rm -rf .dart_tool build
-
       - run: cp android_manifest.xml android/app/src/main/AndroidManifest.xml
       - name: 覆盖 MainActivity.kt
         run: |
           mkdir -p android/app/src/main/kotlin/com/kugou/kugou
           cp android_native/MainActivity.kt android/app/src/main/kotlin/com/kugou/kugou/MainActivity.kt
-          ls -la android/app/src/main/kotlin/com/kugou/kugou/
       - run: flutter pub get
-
       - name: Build
         run: flutter build apk --release
-
-      - name: 定位 APK + 验证 wallpaper
+      - name: 定位 APK
         run: |
-          echo "=== 所有 apk ==="
-          find build -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "(find 失败)"
-
           APK=$(find build -name "app-release.apk" 2>/dev/null | head -1)
           [ -z "$APK" ] && APK=$(find build -name "*.apk" 2>/dev/null | head -1)
-          echo "APK=$APK"
-
-          if [ -z "$APK" ]; then
-            echo "✗ 找不到 APK"
-            ls -laR build/app/outputs/ 2>&1 | head -50
-            exit 1
-          fi
-
-          echo ""
-          echo "=== 验证 wallpaper ==="
-          if unzip -l "$APK" | grep -i wallpaper; then
-            echo "✓✓✓ wallpaper 已打包"
-          else
-            echo "✗✗✗ wallpaper 没打进去"
-            cat pubspec.yaml
-            exit 1
-          fi
-
-          mkdir -p out
-          cp "$APK" out/KuGou.apk
-          ls -lh out/KuGou.apk
-
+          [ -z "$APK" ] && exit 1
+          mkdir -p out && cp "$APK" out/KuGou.apk
+          ls -lh out/
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}

@@ -16,7 +16,8 @@ class Song {
     this.source = 'concept'});
   String get title => singer.isEmpty ? name : '$name - $singer';
   Map<String,dynamic> toJson() => {'hash':hash,'name':name,'singer':singer,
-    'album':album,'albumId':albumId,'duration':duration,'cover':cover,'audioId':audioId,'source':source};
+    'album':album,'albumId':albumId,'duration':duration,'cover':cover,
+    'audioId':audioId,'source':source};
   factory Song.fromJson(Map j) => Song(
     hash: (j['hash'] ?? j['FileHash'] ?? '').toString(),
     name: (j['name'] ?? j['songname'] ?? j['SongName'] ?? '未知').toString(),
@@ -24,7 +25,8 @@ class Song {
     album: (j['album'] ?? j['AlbumName'] ?? '').toString(),
     albumId: (j['albumId'] ?? j['AlbumID'] ?? '').toString(),
     duration: int.tryParse('${j['duration'] ?? j['Duration'] ?? 0}') ?? 0,
-    cover: (j['cover'] ?? j['Image'] ?? '').toString().isEmpty ? null : (j['cover'] ?? j['Image']).toString(),
+    cover: (j['cover'] ?? j['Image'] ?? '').toString().isEmpty
+      ? null : (j['cover'] ?? j['Image']).toString(),
     audioId: (j['audioId'] ?? j['MixSongID'] ?? j['EMixSongID'] ?? '').toString().isEmpty
       ? null : (j['audioId'] ?? j['MixSongID'] ?? j['EMixSongID']).toString(),
     source: (j['source'] ?? 'concept').toString());
@@ -51,19 +53,19 @@ class KuGouApi {
     ].join('; ');
   }
 
-  Future<List<Song>> searchConcept(String kw, {int pagesize = 30}) async {
+  Future<List<Song>> searchConcept(String kw, {int page = 1, int pagesize = 30}) async {
     lastError = null;
     try {
       final r = await _dio.get('$_base/search',
-        queryParameters: {'keywords': kw, 'type': 'song', 'page': 1, 'pagesize': pagesize},
+        queryParameters: {'keywords': kw, 'type': 'song', 'page': page, 'pagesize': pagesize},
         options: Options(headers: {'Cookie': _cookie}));
       final d = r.data is String ? jsonDecode(r.data) : r.data;
       final lists = (d['data']?['lists'] ?? d['data']?['info'] ?? []) as List;
       return lists.whereType<Map>().map((e) {
-        final s = Song.fromJson(Map<String,dynamic>.from(e));
-        return Song(hash: s.hash, name: s.name, singer: s.singer, album: s.album,
-          albumId: s.albumId, duration: s.duration, cover: s.cover,
-          audioId: s.audioId, source: 'concept');
+        final s = Song.fromJson(Map<String, dynamic>.from(e));
+        return Song(hash: s.hash, name: s.name, singer: s.singer,
+          album: s.album, albumId: s.albumId, duration: s.duration,
+          cover: s.cover, audioId: s.audioId, source: 'concept');
       }).where((s) => s.hash.isNotEmpty).toList();
     } catch (e) {
       lastError = '概念版未启动: $e';
@@ -71,10 +73,11 @@ class KuGouApi {
     }
   }
 
-  Future<List<Song>> searchNetease(String kw, {int pagesize = 30}) async {
+  Future<List<Song>> searchNetease(String kw, {int page = 1, int pagesize = 30}) async {
     lastError = null;
-    final results = await NetMusic.search(kw, limit: pagesize);
-    if (results.isEmpty) { lastError = '网易云未返回结果'; return []; }
+    final offset = (page - 1) * pagesize;
+    final results = await NetMusic.search(kw, limit: pagesize, offset: offset);
+    if (results.isEmpty && page == 1) { lastError = '网易云未返回结果'; return []; }
     return results.map((m) => Song(
       hash: 'netease_${m['id']}',
       name: m['name'].toString(),
@@ -87,8 +90,8 @@ class KuGouApi {
 
   Future<List<Song>> search(String kw, {int page = 1, int? pagesize, String? source}) async {
     final size = pagesize ?? 30;
-    if (source == 'netease') return searchNetease(kw, pagesize: size);
-    return searchConcept(kw, pagesize: size);
+    if (source == 'netease') return searchNetease(kw, page: page, pagesize: size);
+    return searchConcept(kw, page: page, pagesize: size);
   }
 
   Future<Song?> resolveNetease(Song s) async {
@@ -103,7 +106,7 @@ class KuGouApi {
 
   Future<Map?> getSongUrl(String hash, {String albumId = '', String? audioId}) async {
     try {
-      final params = <String,dynamic>{'id': hash};
+      final params = <String, dynamic>{'id': hash};
       if (audioId != null && audioId.isNotEmpty) params['album_audio_id'] = audioId;
       final r = await _dio.get('$_base/song/url',
         queryParameters: params,
@@ -145,6 +148,7 @@ class KuGouApi {
   }
 
   dynamic _tryJson(String s) { try { return jsonDecode(s); } catch (_) { return s; } }
+
   String? _pickLyric(dynamic d) {
     if (d == null) return null;
     if (d is String) {
@@ -167,11 +171,17 @@ class KuGouApi {
         }
       }
       for (final k in const ['data','result','candidates','list','info']) {
-        if (d.containsKey(k)) { final r = _pickLyric(d[k]); if (r != null) return r; }
+        if (d.containsKey(k)) {
+          final r = _pickLyric(d[k]);
+          if (r != null) return r;
+        }
       }
     }
     if (d is List) {
-      for (final e in d) { final r = _pickLyric(e); if (r != null) return r; }
+      for (final e in d) {
+        final r = _pickLyric(e);
+        if (r != null) return r;
+      }
     }
     return null;
   }

@@ -10,18 +10,15 @@ enum CookieStatus { unknown, ok, expired, missing }
 class SignatureManager {
   static final SignatureManager I = SignatureManager._();
   SignatureManager._();
-
   Map<String, dynamic>? _config;
   String _source = 'assets';
   CookieStatus _health = CookieStatus.unknown;
   String _healthMsg = '';
-
   Map<String, dynamic>? get config => _config;
   String get source => _source;
   int get version => (_config?['version'] as num?)?.toInt() ?? 0;
   CookieStatus get health => _health;
   String get healthMsg => _healthMsg;
-
   static const importPath = '/storage/emulated/0/Download/kugou-signature.json';
   static const extPath = '/storage/emulated/0/Music/KuGou/cookie.json';
 
@@ -38,9 +35,7 @@ class SignatureManager {
         final m = jsonDecode(await f.readAsString());
         if (m is Map<String, dynamic> && m['version'] != null) {
           _config = m; _source = 'private';
-          await _save();
-          await tryImport();
-          return;
+          await _save(); await tryImport(); return;
         }
       }
     } catch (_) {}
@@ -48,21 +43,18 @@ class SignatureManager {
     try {
       final raw = await rootBundle.loadString('assets/signature.json');
       _config = jsonDecode(raw) as Map<String, dynamic>;
-      _source = 'assets';
-      await _save();
+      _source = 'assets'; await _save();
     } catch (_) {}
   }
 
-  Future<bool> _loadFrom(String path, String sourceName) async {
+  Future<bool> _loadFrom(String path, String src) async {
     try {
       final f = File(path);
       if (!await f.exists()) return false;
       final m = jsonDecode(await f.readAsString());
       if (m is! Map<String, dynamic>) return false;
-      _config = m;
-      _source = sourceName;
-      await _save();
-      return true;
+      _config = m; _source = src;
+      await _save(); return true;
     } catch (_) { return false; }
   }
 
@@ -75,8 +67,7 @@ class SignatureManager {
       final nv = (m['version'] as num?)?.toInt() ?? 0;
       if (nv <= version && source != 'assets') return false;
       _config = m; _source = 'imported';
-      await _save();
-      return true;
+      await _save(); return true;
     } catch (_) { return false; }
   }
 
@@ -107,8 +98,7 @@ class SignatureManager {
       final f = await _pf();
       if (await f.exists()) {
         _config = jsonDecode(await f.readAsString());
-        _source = 'private';
-        return true;
+        _source = 'private'; return true;
       }
     } catch (_) {}
     return false;
@@ -126,12 +116,9 @@ class SignatureManager {
       final dio = Dio(BaseOptions(
         connectTimeout: const Duration(seconds: 4),
         receiveTimeout: const Duration(seconds: 5)));
-      final r = await dio.get(
-        '${ModeManager.I.backendUrl}/search',
+      final r = await dio.get('${ModeManager.I.backendUrl}/search',
         queryParameters: {'keywords': 'test', 'type': 'song', 'page': 1, 'pagesize': 1},
-        options: Options(
-          headers: {'Cookie': _cookieHeader()},
-          validateStatus: (_) => true));
+        options: Options(headers: {'Cookie': _cookieHeader()}, validateStatus: (_) => true));
       final code = r.statusCode ?? 0;
       if (code == 401 || code == 403) {
         _health = CookieStatus.expired;

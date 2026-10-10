@@ -36,7 +36,10 @@ class HarParser {
         if (nn != null && vv != null && keys.contains(nn) && !o.containsKey(nn)) o[nn] = vv;
       }
       if (n['url'] != null) _u(n['url'].toString(), o);
-      if (n['postData'] is Map) { final t = (n['postData'] as Map)['text']?.toString(); if (t != null) _s(t, o); }
+      if (n['postData'] is Map) {
+        final t = (n['postData'] as Map)['text']?.toString();
+        if (t != null) _s(t, o);
+      }
       for (final x in n.values) if (x is Map || x is List) _w(x, o);
     } else if (n is List) for (final x in n) if (x is Map || x is List) _w(x, o);
   }
@@ -63,11 +66,16 @@ class HarParser {
   static void _s(String s, Map<String,String> o) {
     for (final k in keys) {
       if (o.containsKey(k)) continue;
-      final m = RegExp('(?<![a-zA-Z0-9_])${RegExp.escape(k)}=([^;&\\s"\'<>,\\}\\]\\[]+)', caseSensitive: false).firstMatch(s);
-      if (m != null) { final v = m.group(1)!.trim(); if (v.isNotEmpty && v != 'null' && v != 'undefined') o[k] = v; }
+      final m = RegExp('(?<![a-zA-Z0-9_])${RegExp.escape(k)}=([^;&\\s"\'<>,\\}\\]\\[]+)',
+        caseSensitive: false).firstMatch(s);
+      if (m != null) {
+        final v = m.group(1)!.trim();
+        if (v.isNotEmpty && v != 'null' && v != 'undefined') o[k] = v;
+      }
     }
   }
-  static bool isValid(Map<String,String> m) => (m['token'] ?? '').length >= 20 && (m['userid'] ?? '').isNotEmpty;
+  static bool isValid(Map<String,String> m) =>
+    (m['token'] ?? '').length >= 20 && (m['userid'] ?? '').isNotEmpty;
   static String describe(Map<String,String> m) {
     if (m.isEmpty) return '（未找到字段）';
     final b = StringBuffer();

@@ -12,7 +12,6 @@ class SourceManager extends ChangeNotifier {
   MusicSource get discover => _discover;
   String get searchLabel => _search == MusicSource.concept ? '酷狗概念版' : '网易云';
   String get discoverLabel => _discover == MusicSource.concept ? '酷狗概念版' : '网易云';
-
   Future<void> init() async {
     final sp = await SharedPreferences.getInstance();
     _search = (sp.getString('source_search') == 'netease') ? MusicSource.netease : MusicSource.concept;
@@ -21,14 +20,12 @@ class SourceManager extends ChangeNotifier {
   }
   Future<void> setSearch(MusicSource s) async {
     _search = s;
-    final sp = await SharedPreferences.getInstance();
-    await sp.setString('source_search', s.name);
+    (await SharedPreferences.getInstance()).setString('source_search', s.name);
     notifyListeners();
   }
   Future<void> setDiscover(MusicSource s) async {
     _discover = s;
-    final sp = await SharedPreferences.getInstance();
-    await sp.setString('source_discover', s.name);
+    (await SharedPreferences.getInstance()).setString('source_discover', s.name);
     notifyListeners();
   }
 }

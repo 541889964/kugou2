@@ -1,7 +1,7 @@
 name: kugou
-description: KuGou Music App
+description: KuGou Music Pro
 publish_to: 'none'
-version: 20.0.0+20
+version: 30.0.0+30
 environment:
   sdk: '>=3.0.0 <4.0.0'
 dependencies:
@@ -18,6 +18,7 @@ dependencies:
   file_picker: ^8.0.6
   flutter_overlay_window: ^0.5.0
   url_launcher: ^6.2.6
+  home_widget: ^0.6.0
 dev_dependencies:
   flutter_test: {sdk: flutter}
   flutter_lints: ^3.0.0

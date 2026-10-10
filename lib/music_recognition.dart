@@ -11,8 +11,7 @@ import 'package:permission_handler/permission_handler.dart';
 enum RecogState { idle, recording, uploading, done, failed }
 
 class RecogResult {
-  final String title;
-  final String artist;
+  final String title, artist;
   final String? source;
   RecogResult({required this.title, required this.artist, this.source});
 }
@@ -20,7 +19,6 @@ class RecogResult {
 class MusicRecognition extends ChangeNotifier {
   static final MusicRecognition I = MusicRecognition._();
   MusicRecognition._();
-
   static const _ch = MethodChannel('kugou/recorder');
 
   RecogState _state = RecogState.idle;
@@ -46,7 +44,7 @@ class MusicRecognition extends ChangeNotifier {
       final dir = await getTemporaryDirectory();
       _currentPath = '${dir.path}/recog_${DateTime.now().millisecondsSinceEpoch}.m4a';
       final ok = await _ch.invokeMethod<bool>('start', {'path': _currentPath});
-      if (ok != true) { _fail('启动录音失败'); return; }
+      if (ok != true) { _fail('启动录音失败（原生通道未就绪）'); return; }
       _state = RecogState.recording;
       _progress = 0; _waveform = []; _elapsedMs = 0;
       _result = null; _error = null;
@@ -88,16 +86,13 @@ class MusicRecognition extends ChangeNotifier {
     if (!await file.exists()) return null;
     final bytes = await file.readAsBytes();
     if (bytes.length < 1024) return null;
-
-    // 网易云听歌识曲需要 PCM/WAV raw 数据。m4a 先尝试直接上传。
     final sessionId = _randomHex(16);
     final dio = Dio(BaseOptions(
       connectTimeout: const Duration(seconds: 12),
       receiveTimeout: const Duration(seconds: 15),
       headers: {
         'User-Agent': 'Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36',
-        'Referer': 'https://music.163.com/',
-      }));
+        'Referer': 'https://music.163.com/'}));
     final url = 'https://interface.music.163.com/api/music/audio/match'
         '?sessionId=$sessionId&algorithmCode=shazam_v2&duration=8';
     try {
@@ -122,7 +117,9 @@ class MusicRecognition extends ChangeNotifier {
     return List.generate(n, (_) => c[r.nextInt(c.length)]).join();
   }
 
-  void _fail(String msg) { _state = RecogState.failed; _error = msg; notifyListeners(); }
+  void _fail(String msg) {
+    _state = RecogState.failed; _error = msg; notifyListeners();
+  }
 
   void reset() {
     _timer?.cancel();

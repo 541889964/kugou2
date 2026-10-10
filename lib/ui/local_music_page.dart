@@ -30,7 +30,7 @@ class _LMP extends State<LocalMusicPage> with AutomaticKeepAliveClientMixin {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(bottom: false, child: Column(children: [
-        Padding(padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+        Padding(padding: const EdgeInsets.fromLTRB(20, 14, 12, 8),
           child: Row(children: [
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('本地音乐', style: TextStyle(fontSize: 24,
@@ -40,10 +40,9 @@ class _LMP extends State<LocalMusicPage> with AutomaticKeepAliveClientMixin {
                 color: Colors.white.withOpacity(0.5))),
             ]),
             const Spacer(),
-            IconButton(
-              icon: sc.scanning
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Icon(Icons.refresh),
+            IconButton(icon: sc.scanning
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Icon(Icons.refresh),
               onPressed: sc.scanning ? null : () => sc.scan()),
           ])),
         Padding(padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
@@ -55,11 +54,6 @@ class _LMP extends State<LocalMusicPage> with AutomaticKeepAliveClientMixin {
                 suffixIcon: _f.isNotEmpty ? IconButton(icon: const Icon(Icons.close, size: 18),
                   onPressed: () { _fc.clear(); setState(() => _f = ''); }) : null,
                 border: InputBorder.none, fillColor: Colors.transparent)))),
-        if (sc.status.isNotEmpty)
-          Padding(padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-            child: Align(alignment: Alignment.centerLeft,
-              child: Text(sc.status, style: TextStyle(fontSize: 11.5,
-                color: Colors.white.withOpacity(0.55))))),
         Expanded(child: _body(sc, list)),
       ])),
     );
@@ -70,52 +64,48 @@ class _LMP extends State<LocalMusicPage> with AutomaticKeepAliveClientMixin {
       mainAxisAlignment: MainAxisAlignment.center, children: [
       const CircularProgressIndicator(), const SizedBox(height: 16),
       Text(sc.status, style: TextStyle(color: Colors.white.withOpacity(0.7)))]));
-    if (sc.songs.isEmpty) return Center(child: Padding(padding: const EdgeInsets.all(32),
-      child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+    if (sc.songs.isEmpty) return Center(child: Column(
+      mainAxisAlignment: MainAxisAlignment.center, children: [
       Container(padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(shape: BoxShape.circle,
-          gradient: AppTheme.grad.withOpacity(0.3),
-          boxShadow: [BoxShadow(color: AppTheme.p.withOpacity(0.4), blurRadius: 40)]),
+          gradient: AppTheme.grad.withOpacity(0.3)),
         child: Icon(Icons.folder_open, size: 52, color: Colors.white.withOpacity(0.9))),
       const SizedBox(height: 22),
       const Text('还没有扫描本地音乐', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
       const SizedBox(height: 6),
-      Text('点击右上角 ↻ 开始扫描', style: TextStyle(fontSize: 12,
-        color: Colors.white.withOpacity(0.5))),
+      Text('点击右上角 ↻ 开始扫描', style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.5))),
       const SizedBox(height: 22),
       FilledButton.icon(onPressed: () => sc.scan(),
         icon: const Icon(Icons.search), label: const Text('扫描音乐')),
-    ])));
+    ]));
     if (list.isEmpty) return Center(child: Text('没有匹配的歌曲',
       style: TextStyle(color: Colors.white.withOpacity(0.5))));
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
       itemCount: list.length,
+      itemExtent: 68,
       itemBuilder: (_, i) => RepaintBoundary(child: _tile(list[i], i, sc)));
   }
 
   Widget _tile(dynamic s, int i, LocalMusicScanner sc) {
     final ip = IconPicker.forHash(s.hash);
     return GlassCard(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      radius: 16,
+      margin: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), radius: 14,
       onTap: () {
         PlayerService.I.playFromList(s, sc.songs, i: i);
         Navigator.push(context, MaterialPageRoute(builder: (_) => const PlayerPage()));
       },
       child: Row(children: [
-        Container(width: 48, height: 48,
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.35),
-              blurRadius: 10, offset: const Offset(0, 4))]),
-          child: ClipRRect(borderRadius: BorderRadius.circular(12),
+        Container(width: 46, height: 46,
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(10)),
+          child: ClipRRect(borderRadius: BorderRadius.circular(10),
             child: ip.isEmpty ? Container(decoration: const BoxDecoration(gradient: AppTheme.discGrad),
-              child: const Icon(Icons.music_note, color: Colors.white, size: 24))
+              child: const Icon(Icons.music_note, color: Colors.white, size: 22))
               : Image.asset(ip, fit: BoxFit.cover, filterQuality: FilterQuality.low,
                 errorBuilder: (_, __, ___) => Container(
                   decoration: const BoxDecoration(gradient: AppTheme.discGrad),
-                  child: const Icon(Icons.music_note, color: Colors.white, size: 24))))),
+                  child: const Icon(Icons.music_note, color: Colors.white, size: 22))))),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis,

@@ -2,6 +2,6 @@
   "version": 1,
   "user": {"token":"","userid":"","dfid":"","mid":"","uuid":"-","appid":"3116","clientver":"11590","kg_fake":""},
   "salt": "NVPh5oo715z5DIWAeQlhMDsWXXQV4hwt",
-  "search": {"host":"complexsearch.kugou.com","path":"/v2/search/song","srcappid":"2919","clientver":"2000","appid":"1014","platid":"4","platform_standard":"WebFilter","platform_lite":"lite"},
+  "search": {"host":"complexsearch.kugou.com","path":"/v2/search/song","srcappid":"2919","clientver":"2000","appid":"1014","platid":"4"},
   "lyric": {"search_host":"krcs.kugou.com","search_path":"/search","download_host":"krcs.kugou.com","download_path":"/download"}
 }

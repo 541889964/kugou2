@@ -1,10 +1,8 @@
-import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'kugou.dart';
-import 'mode_manager.dart';
 
 class DownloadTask {
   final String hash, name, singer;
@@ -32,16 +30,13 @@ class Downloader extends ChangeNotifier {
   }
   String _safe(String s) => s.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
 
-  /// 扫描本地是否已有该歌，返回文件路径或 null
   Future<String?> _findExisting(Song song) async {
     try {
       final d = Directory(_dir);
       if (!await d.exists()) return null;
       final cands = <String>{
-        _safe(song.title),
-        _safe('${song.name} - ${song.singer}'),
-        _safe('${song.singer} - ${song.name}'),
-        _safe(song.name),
+        _safe(song.title), _safe('${song.name} - ${song.singer}'),
+        _safe('${song.singer} - ${song.name}'), _safe(song.name),
       }.where((x) => x.isNotEmpty).toList();
       for (final f in d.listSync()) {
         if (f is! File) continue;
@@ -55,16 +50,13 @@ class Downloader extends ChangeNotifier {
     return null;
   }
 
-  /// App 启动时批量扫描：把已下载的标记为 done
   Future<void> scanDownloaded(List<Song> songs) async {
     for (final s in songs) {
       if (_tasks.containsKey(s.hash)) continue;
       final p = await _findExisting(s);
       if (p != null) {
         final t = DownloadTask(hash: s.hash, name: s.name, singer: s.singer);
-        t.status = 'done';
-        t.progress = 1.0;
-        t.filePath = p;
+        t.status = 'done'; t.progress = 1.0; t.filePath = p;
         _tasks[s.hash] = t;
       }
     }
@@ -79,29 +71,30 @@ class Downloader extends ChangeNotifier {
   Future<bool> download(Song song) async {
     if (_tasks.containsKey(song.hash)) {
       final t = _tasks[song.hash]!;
-      if (t.status == 'downloading') return false;
-      if (t.status == 'done') return false;
+      if (t.status == 'downloading' || t.status == 'done') return false;
     }
-
-    // 检查本地是否已有（即使 App 数据被清过）
     final existing = await _findExisting(song);
     if (existing != null) {
       final t = DownloadTask(hash: song.hash, name: song.name, singer: song.singer);
       t.status = 'done'; t.progress = 1.0; t.filePath = existing;
-      _tasks[song.hash] = t;
-      notifyListeners();
-      return false; // 已存在，不重复下
+      _tasks[song.hash] = t; notifyListeners(); return false;
     }
-
     final t = DownloadTask(hash: song.hash, name: song.name, singer: song.singer);
     _tasks[song.hash] = t; notifyListeners();
     try {
-      if (!await _perm()) { t.status = 'failed'; t.error = '需要权限'; notifyListeners(); return false; }
+      if (!await _perm()) {
+        t.status = 'failed'; t.error = '需要权限'; notifyListeners(); return false;
+      }
       t.status = 'resolving'; notifyListeners();
       final r = await KuGouApi.I.getSongUrl(song.hash, albumId: song.albumId, audioId: song.audioId);
-      if (r == null || r['error'] != null) { t.status = 'failed'; t.error = r?['message']?.toString() ?? '失败'; notifyListeners(); return false; }
+      if (r == null || r['error'] != null) {
+        t.status = 'failed'; t.error = r?['message']?.toString() ?? '失败';
+        notifyListeners(); return false;
+      }
       final url = r['url'] as String?;
-      if (url == null || url.isEmpty) { t.status = 'failed'; t.error = '空链接'; notifyListeners(); return false; }
+      if (url == null || url.isEmpty) {
+        t.status = 'failed'; t.error = '空链接'; notifyListeners(); return false;
+      }
       String ext = '.mp3';
       final low = url.toLowerCase();
       if (low.contains('.flac')) ext = '.flac';
@@ -127,8 +120,8 @@ class Downloader extends ChangeNotifier {
   Future<bool> downloadLyric(Song song, {String? audioPath}) async {
     try {
       if (!await _perm()) return false;
-      final l = await KuGouApi.I.getLyric(song.hash,
-        duration: song.duration, songName: song.name, singer: song.singer);
+      final l = await KuGouApi.I.getLyric(song.hash, duration: song.duration,
+        songName: song.name, singer: song.singer);
       if (l == null || l.trim().isEmpty) return false;
       String? audioFile = audioPath ?? _tasks[song.hash]?.filePath;
       if (audioFile == null) audioFile = await _findExisting(song);
@@ -146,5 +139,8 @@ class Downloader extends ChangeNotifier {
   }
 
   void clearTask(String h) { _tasks.remove(h); notifyListeners(); }
-  void clearAllDone() { _tasks.removeWhere((_, t) => t.status == 'done' || t.status == 'failed'); notifyListeners(); }
+  void clearAllDone() {
+    _tasks.removeWhere((_, t) => t.status == 'done' || t.status == 'failed');
+    notifyListeners();
+  }
 }
