@@ -49,7 +49,7 @@ class _R extends State<RootPage> {
       } catch (_) {}
     }
     if (!mounted) return;
-    await Future.delayed(const Duration(milliseconds: 120));
+    await Future.delayed(const Duration(milliseconds: 100));
     if (!mounted) return;
     final agreed = await showAnnouncement(context);
     if (!agreed) {
@@ -62,35 +62,20 @@ class _R extends State<RootPage> {
   @override
   void dispose() { _pc.dispose(); super.dispose(); }
 
-  bool _canPop() => _t == 0 ? (_hpKey.currentState?.canPopFromBack() ?? true) : false;
-
   @override
   Widget build(BuildContext context) {
     final hasSong = context.select<PlayerService, bool>((p) => p.current != null);
-    return PopScope(
-      canPop: _canPop(),
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        if (_t != 0) {
-          setState(() => _t = 0);
-          _pc.animateToPage(0, duration: const Duration(milliseconds: 320),
-            curve: Curves.easeOutCubic);
-          return;
-        }
-        _hpKey.currentState?.handleBack();
-      },
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        body: PageView(
-          controller: _pc,
-          onPageChanged: (i) => setState(() => _t = i),
-          children: _pages,
-        ),
-        bottomNavigationBar: Column(mainAxisSize: MainAxisSize.min, children: [
-          if (hasSong) const _Mini(),
-          _navBar(),
-        ]),
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: PageView(
+        controller: _pc,
+        onPageChanged: (i) => setState(() => _t = i),
+        children: _pages,
       ),
+      bottomNavigationBar: Column(mainAxisSize: MainAxisSize.min, children: [
+        if (hasSong) const _Mini(),
+        _navBar(),
+      ]),
     );
   }
 
@@ -121,11 +106,11 @@ class _R extends State<RootPage> {
                     if (i == _t) return;
                     setState(() => _t = i);
                     _pc.animateToPage(i,
-                      duration: const Duration(milliseconds: 320),
+                      duration: const Duration(milliseconds: 300),
                       curve: Curves.easeOutCubic);
                   },
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 240),
+                    duration: const Duration(milliseconds: 220),
                     curve: Curves.easeOutCubic,
                     padding: const EdgeInsets.symmetric(vertical: 9),
                     decoration: BoxDecoration(
@@ -172,29 +157,34 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
 
   bool _homeLoading = true;
   List<Map<String, dynamic>> _recommend = [];
+  List<Map<String, dynamic>> _rank = [];
+  int _bannerIndex = 0;
 
   @override
   void initState() { super.initState(); _loadHome(); }
 
   Future<void> _loadHome() async {
+    setState(() => _homeLoading = true);
+    final r = await NetMusic.dailyRecommend();
+    final rank = await NetMusic.rankSongs(3778678, limit: 20);
+    if (!mounted) return;
+    setState(() {
+      _recommend = r.take(20).toList();
+      _rank = rank.take(20).toList();
+      _homeLoading = false;
+    });
+  }
+
+  Future<void> _loadMore() async {
     final r = await NetMusic.dailyRecommend();
     if (!mounted) return;
-    setState(() { _recommend = r.take(9).toList(); _homeLoading = false; });
+    setState(() => _recommend = r.take(40).toList());
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已加载更多推荐')));
   }
 
   @override
   void dispose() { _c.dispose(); super.dispose(); }
-
-  bool canPopFromBack() => _c.text.isEmpty && _kw.isEmpty && _results.isEmpty;
-
-  void handleBack() {
-    if (_results.isNotEmpty || _kw.isNotEmpty) {
-      setState(() { _results = []; _kw = ''; });
-      return;
-    }
-    if (_c.text.isNotEmpty) { setState(() => _c.clear()); return; }
-    SystemNavigator.pop();
-  }
 
   Future<void> _search() async {
     final kw = _c.text.trim();
@@ -214,52 +204,95 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
     }
   }
 
+  void _clearSearch() {
+    setState(() { _results = []; _kw = ''; _c.clear(); });
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(bottom: false, child: Column(children: [
-        _topBar(),
+        if (_kw.isEmpty) _topTabs() else _searchHeader(),
+        if (_kw.isEmpty) Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+          child: _searchBar()),
         Expanded(child: _body()),
       ])),
     );
   }
 
-  Widget _topBar() {
+  // 顶部：发现 / 免费听 / 乐库（仿酷狗）
+  Widget _topTabs() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      padding: const EdgeInsets.fromLTRB(20, 14, 12, 6),
       child: Row(children: [
-        Expanded(child: GlassCard(
-          radius: 22,
-          padding: EdgeInsets.zero,
-          heavy: true,
-          child: TextField(
-            controller: _c,
-            onSubmitted: (_) => _search(),
-            textInputAction: TextInputAction.search,
-            style: const TextStyle(fontSize: 13.5, color: Colors.white),
-            decoration: InputDecoration(
-              hintText: '搜索歌曲、歌手或专辑',
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13),
-              prefixIcon: Padding(
-                padding: const EdgeInsets.only(left: 6, right: 2),
-                child: Icon(Icons.search, size: 19, color: Colors.white.withOpacity(0.55))),
-              prefixIconConstraints: const BoxConstraints(minWidth: 32),
-              suffixIcon: _c.text.isNotEmpty
-                ? IconButton(icon: const Icon(Icons.close, size: 17), splashRadius: 16,
-                    onPressed: () => setState(() => _c.clear()))
-                : null,
-              border: InputBorder.none, fillColor: Colors.transparent,
-              contentPadding: const EdgeInsets.symmetric(vertical: 13)),
-            onChanged: (_) => setState(() {})))),
-        const SizedBox(width: 8),
-        GestureDetector(
-          onTap: () => Navigator.push(context,
-            MaterialPageRoute(builder: (_) => const RecognizePage())),
-          child: GlassCard(radius: 22, padding: const EdgeInsets.all(11), heavy: true,
-            child: Icon(Icons.mic_none, size: 20, color: Colors.white.withOpacity(0.85)))),
+        const Text('发现', style: TextStyle(
+          fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.4)),
+        const SizedBox(width: 22),
+        Text('免费听', style: TextStyle(
+          fontSize: 15, fontWeight: FontWeight.w600,
+          color: Colors.white.withOpacity(0.45))),
+        const SizedBox(width: 18),
+        Text('乐库', style: TextStyle(
+          fontSize: 15, fontWeight: FontWeight.w600,
+          color: Colors.white.withOpacity(0.45))),
+        const Spacer(),
+        IconButton(
+          icon: const Icon(Icons.search, size: 22, color: Colors.white),
+          splashRadius: 20,
+          onPressed: () => FocusScope.of(context).requestFocus(FocusNode())),
+        IconButton(
+          icon: const Icon(Icons.history, size: 22, color: Colors.white),
+          splashRadius: 20,
+          onPressed: () {}),
       ]));
+  }
+
+  // 搜索状态下的顶栏
+  Widget _searchHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 8, 16, 8),
+      child: Row(children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_back, size: 22),
+          splashRadius: 20,
+          onPressed: _clearSearch),
+        const Text('搜索结果', style: TextStyle(
+          fontSize: 17, fontWeight: FontWeight.w800)),
+        const Spacer(),
+        Text('共 ${_results.length} 首', style: TextStyle(
+          fontSize: 12, color: AppTheme.p, fontWeight: FontWeight.w700)),
+      ]));
+  }
+
+  Widget _searchBar() {
+    return GlassCard(
+      radius: 22, padding: EdgeInsets.zero, heavy: true,
+      child: TextField(
+        controller: _c,
+        onSubmitted: (_) => _search(),
+        textInputAction: TextInputAction.search,
+        style: const TextStyle(fontSize: 13.5, color: Colors.white),
+        decoration: InputDecoration(
+          hintText: '曲风盲盒 · 随机心动',
+          hintStyle: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13),
+          prefixIcon: Padding(
+            padding: const EdgeInsets.only(left: 6, right: 2),
+            child: Icon(Icons.search, size: 19, color: Colors.white.withOpacity(0.55))),
+          prefixIconConstraints: const BoxConstraints(minWidth: 32),
+          suffixIcon: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (_c.text.isNotEmpty)
+              IconButton(icon: const Icon(Icons.close, size: 17), splashRadius: 16,
+                onPressed: () => setState(() => _c.clear())),
+            IconButton(icon: const Icon(Icons.mic_none, size: 19), splashRadius: 16,
+              onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const RecognizePage()))),
+          ]),
+          border: InputBorder.none, fillColor: Colors.transparent,
+          contentPadding: const EdgeInsets.symmetric(vertical: 13)),
+        onChanged: (_) => setState(() {})));
   }
 
   Widget _body() {
@@ -268,114 +301,213 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
       if (_results.isEmpty) return _empty('没有找到结果\n换个关键词试试');
       return ListView.builder(
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-        itemCount: _results.length + 1,
-        itemBuilder: (_, i) {
-          if (i == 0) return _countBar();
-          return RepaintBoundary(child: _songRow(_results[i - 1]));
-        });
+        itemCount: _results.length,
+        itemExtent: 66,
+        itemBuilder: (_, i) => RepaintBoundary(child: _songRow(_results[i])));
     }
     return RefreshIndicator(
       onRefresh: _loadHome, color: AppTheme.p, backgroundColor: AppTheme.surface,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(0, 4, 0, 24),
+        padding: const EdgeInsets.only(bottom: 24),
         children: [
-          _quickRow(),
+          _bigBanner(),
+          const SizedBox(height: 18),
+          _sectionTitle('概念 er 新推', more: _loadMore),
+          _songList(_recommend.take(3).toList(), '新推'),
+          const SizedBox(height: 18),
+          _sectionTitle('小众宝藏佳作'),
+          _bigCoverCard(),
+          const SizedBox(height: 18),
+          _sectionTitle('热歌榜', more: () => Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const DiscoverPage()))),
+          _songList(_rank.take(4).toList(), '榜单'),
+          const SizedBox(height: 18),
+          _sectionTitle('频道推荐'),
+          _channelGrid(),
           const SizedBox(height: 20),
-          _sectionTitle('为你推荐'),
-          if (_homeLoading) Padding(padding: const EdgeInsets.all(20),
-            child: Center(child: CircularProgressIndicator(color: AppTheme.p)))
-          else _recommendGrid(),
-          const SizedBox(height: 12),
         ],
       ));
   }
 
-  Widget _countBar() {
-    return Padding(padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-      child: Row(children: [
-        Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(color: AppTheme.p.withOpacity(0.20),
-            borderRadius: BorderRadius.circular(8)),
-          child: Text('共 ${_results.length} 首', style: TextStyle(fontSize: 11,
-            color: AppTheme.p, fontWeight: FontWeight.w800))),
-        const SizedBox(width: 10),
-        Expanded(child: Text('「$_kw」', maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.45)))),
-      ]));
+  // 大横幅：图片 + 右侧文字列表（仿酷狗）
+  Widget _bigBanner() {
+    if (_recommend.isEmpty) return const SizedBox(height: 200);
+    final top3 = _recommend.take(3).toList();
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        height: 220,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [AppTheme.p.withOpacity(0.22), AppTheme.s.withOpacity(0.14)]),
+          border: Border.all(color: Colors.white.withOpacity(0.10)),
+          boxShadow: [BoxShadow(color: AppTheme.p.withOpacity(0.20),
+            blurRadius: 24, spreadRadius: -6)]),
+        padding: const EdgeInsets.all(14),
+        child: Row(children: [
+          // 左侧封面
+          AspectRatio(aspectRatio: 1, child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: _cover('banner_${top3[0]['name']}'))),
+          const SizedBox(width: 14),
+          // 右侧列表
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('小语种', style: TextStyle(
+                fontSize: 20, fontWeight: FontWeight.w900)),
+              Expanded(child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: top3.map((m) {
+                  return Text((m['name'] ?? '').toString(),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13,
+                      fontWeight: FontWeight.w700, height: 1.4));
+                }).toList())),
+              Row(children: [
+                Expanded(child: Text('耳朵环球旅行，这些神曲绝了',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 10.5,
+                    color: Colors.white.withOpacity(0.55)))),
+                Container(width: 26, height: 26,
+                  decoration: BoxDecoration(
+                    color: AppTheme.s.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(8)),
+                  child: const Icon(Icons.play_arrow, size: 15, color: Colors.white)),
+              ]),
+            ])),
+        ])));
   }
 
-  Widget _quickRow() {
-    final actions = [
-      (Icons.auto_awesome, '每日推荐', AppTheme.p, AppTheme.accent,
-        () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoverPage()))),
-      (Icons.graphic_eq, '听歌识曲', AppTheme.s, const Color(0xFF0EA5E9),
-        () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RecognizePage()))),
-      (Icons.favorite, '我的收藏', AppTheme.accent, const Color(0xFFF97316),
-        () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PlaylistPage()))),
-      (Icons.folder_special, '本地音乐', const Color(0xFF10B981), AppTheme.s,
-        () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LocalMusicPage()))),
-    ];
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(children: actions.map((a) => Expanded(child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: a.$5,
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          IconTile(icon: a.$1, c1: a.$3, c2: a.$4, size: 52),
-          const SizedBox(height: 8),
-          Text(a.$2, style: const TextStyle(fontSize: 11,
-            fontWeight: FontWeight.w600, color: Colors.white)),
-        ])))).toList()));
+  // 大封面卡片（左图右字）
+  Widget _bigCoverCard() {
+    final m = _recommend.isNotEmpty ? _recommend.first : null;
+    if (m == null) return const SizedBox(height: 180);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        height: 180,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: const Color(0xFF2A1F3A).withOpacity(0.7),
+          border: Border.all(color: Colors.white.withOpacity(0.10))),
+        padding: const EdgeInsets.all(14),
+        child: Row(children: [
+          AspectRatio(aspectRatio: 0.78, child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: _cover('big_${m['name']}'))),
+          const SizedBox(width: 16),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('MUSIC\nSTORY001',
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900,
+                  color: Color(0xFFD4C57A), height: 1.1, letterSpacing: -0.5)),
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('角色替换', style: TextStyle(
+                  fontSize: 15, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text((m['artist'] ?? '').toString(),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12,
+                    color: Color(0xFFB8A8FF), fontWeight: FontWeight.w700)),
+                const SizedBox(height: 2),
+                Text('《${m['name']}》',
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 10.5,
+                    color: Colors.white.withOpacity(0.5))),
+              ]),
+            ])),
+        ])));
   }
 
-  Widget _sectionTitle(String t) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+  Widget _sectionTitle(String t, {VoidCallback? more}) => Padding(
+    padding: const EdgeInsets.fromLTRB(20, 0, 16, 10),
     child: Row(children: [
-      Container(width: 3, height: 16,
-        decoration: BoxDecoration(color: AppTheme.p,
-          borderRadius: BorderRadius.circular(2))),
-      const SizedBox(width: 8),
-      Text(t, style: const TextStyle(fontSize: 17,
-        fontWeight: FontWeight.w800, letterSpacing: -0.2)),
+      Text(t, style: const TextStyle(
+        fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: -0.2)),
+      const Spacer(),
+      if (more != null)
+        IconButton(icon: const Icon(Icons.chevron_right, size: 22),
+          splashRadius: 18, onPressed: more),
     ]));
 
-  Widget _recommendGrid() {
-    if (_recommend.isEmpty) return Padding(padding: const EdgeInsets.all(20),
-      child: Center(child: Text('暂无推荐', style: TextStyle(
-        color: Colors.white.withOpacity(0.5), fontSize: 13))));
-    return Padding(padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: GridView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: _recommend.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3, mainAxisSpacing: 12, crossAxisSpacing: 12,
-          childAspectRatio: 0.72),
-        itemBuilder: (_, i) {
-          final m = _recommend[i];
-          final name = (m['name'] ?? '').toString();
-          final artist = (m['artist'] ?? '').toString();
-          final hash = 'rec_${name}_$artist';
-          return RepaintBoundary(child: GestureDetector(
-            onTap: () => _playRecommend(name, artist),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              AspectRatio(aspectRatio: 1,
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.4),
-                      blurRadius: 12, offset: const Offset(0, 6))]),
-                  child: ClipRRect(borderRadius: BorderRadius.circular(14),
-                    child: _cover(hash)))),
-              const SizedBox(height: 8),
-              Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 2),
-              Text(artist, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 10.5,
-                  color: Colors.white.withOpacity(0.55))),
-            ])));
-        }));
+  Widget _songList(List<Map<String, dynamic>> list, String tag) {
+    if (list.isEmpty) return const SizedBox.shrink();
+    return Column(children: list.map((m) {
+      final name = (m['name'] ?? '').toString();
+      final artist = (m['artist'] ?? '').toString();
+      final hash = '${tag}_${name}_$artist';
+      return RepaintBoundary(child: GlassCard(
+        margin: const EdgeInsets.fromLTRB(16, 3, 16, 3),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        radius: 14,
+        onTap: () => _playRecommend(name, artist),
+        child: Row(children: [
+          SizedBox(width: 46, height: 46, child: ClipRRect(
+            borderRadius: BorderRadius.circular(10), child: _cover(hash))),
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center, children: [
+            Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 3),
+            Text(artist, maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 11,
+                color: Colors.white.withOpacity(0.55))),
+          ])),
+          Icon(Icons.favorite_border, size: 19,
+            color: Colors.white.withOpacity(0.5)),
+        ])));
+    }).toList());
+  }
+
+  // 频道推荐：2 列网格
+  Widget _channelGrid() {
+    final items = [
+      ('南部档案 · 影视剧', '5581 订阅', 'ch1', const Color(0xFF7C4A3A)),
+      ('术力口 · 什么都可以发', '1721 订阅', 'ch2', const Color(0xFF9B2C5C)),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Row(children: items.map((it) {
+        return Expanded(child: Padding(
+          padding: EdgeInsets.only(right: it.$3 == 'ch1' ? 8 : 0),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            AspectRatio(aspectRatio: 0.85, child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  colors: [it.$4, it.$4.withOpacity(0.4)]),
+                border: Border.all(color: Colors.white.withOpacity(0.10))),
+              child: Stack(children: [
+                const Positioned(top: 10, left: 12,
+                  child: Text('CHANNEL·K', style: TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w800,
+                    color: Colors.white, letterSpacing: 1))),
+                Positioned(bottom: 10, left: 12, right: 12, child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(it.$1, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12.5,
+                      fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 3),
+                  Text(it.$2, style: TextStyle(fontSize: 10,
+                    color: Colors.white.withOpacity(0.65))),
+                ])),
+              ]))),
+            const SizedBox(height: 6),
+            Text('喜欢盐焗虾就好', maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 10.5, color: Colors.white.withOpacity(0.5))),
+          ])));
+      }).toList()));
   }
 
   Future<void> _playRecommend(String name, String artist) async {
