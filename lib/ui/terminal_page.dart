@@ -390,14 +390,23 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
         onPressed: () => Navigator.pop(context, true),
         child: const Text('完成', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)));
     }
-    return FilledButton(
-      style: FilledButton.styleFrom(
-        backgroundColor: const Color(0xFFFBBF24),
-        foregroundColor: Colors.black,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-      onPressed: _start,
-      child: const Text('重试', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)));
+    // 失败：显示「查看崩溃日志」+「重试」
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      TextButton(
+        onPressed: _showCrashLog,
+        style: TextButton.styleFrom(
+          foregroundColor: Colors.white70,
+          padding: const EdgeInsets.symmetric(horizontal: 8)),
+        child: const Text('查看崩溃日志', style: TextStyle(fontSize: 11))),
+      FilledButton(
+        style: FilledButton.styleFrom(
+          backgroundColor: const Color(0xFFFBBF24),
+          foregroundColor: Colors.black,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+        onPressed: _start,
+        child: const Text('重试', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
+    ]);
   }
 }
 
