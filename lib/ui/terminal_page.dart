@@ -35,9 +35,28 @@ class _T extends State<TerminalPage> {
     }
   }
 
+  String _lastLogType = '';
+  int _lastLogRepeat = 0;
+
   void _onLog(TermLine line) {
     if (!mounted) return;
-    setState(() => _lines.add(line));
+
+    // 判断是否是"下载进度"（形如 "Node  50%  ..." 或 "Backend  50%  ..."）
+    final isProgress = RegExp(r'(Node|Backend)\s+\d+%').hasMatch(line.text);
+    if (isProgress) {
+      // 进度行：替换上一条进度行，不追加
+      if (_lines.isNotEmpty && RegExp(r'(Node|Backend)\s+\d+%').hasMatch(_lines.last.text)) {
+        setState(() => _lines[_lines.length - 1] = line);
+        return;
+      }
+    }
+
+    setState(() {
+      _lines.add(line);
+      if (_lines.length > 300) {
+        _lines.removeRange(0, _lines.length - 300);
+      }
+    });
     final t = line.text;
     if (t.contains('测速')) {
       _phase = 1;

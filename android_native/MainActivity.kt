@@ -163,6 +163,17 @@ class MainActivity: FlutterActivity() {
             }
     }
 
+    /// Android 8 兼容：手写 readFully 替代 InputStream.readNBytes
+    private fun readFully(input: InputStream, buf: ByteArray, len: Int): Int {
+        var total = 0
+        while (total < len) {
+            val n = input.read(buf, total, len - total)
+            if (n <= 0) break
+            total += n
+        }
+        return total
+    }
+
     private fun unpackTarGz(tarGz: File, dest: File) {
         if (!tarGz.exists()) throw Exception("源文件不存在: ${tarGz.absolutePath}")
         if (tarGz.length() < 100) throw Exception("源文件太小")
@@ -174,7 +185,7 @@ class MainActivity: FlutterActivity() {
         val header = ByteArray(512)
         var longName: String? = null
         while (true) {
-            val read = input.readNBytes(header, 0, 512)
+            val read = readFully(input, header, 512)
             if (read < 512) break
             if (header.all { it == 0.toByte() }) break
 
