@@ -83,7 +83,7 @@ class _S extends State<SplashPage> with TickerProviderStateMixin {
           unawaited(BackendManager.downloadRuntime());
         } else {
           setState(() => _st = '启动后端服务…');
-          unawaited(BackendManager.start());
+          unawaited(BackendManager.executeOnly());
         }
       } catch (_) {}
       await _tick(start, 4500);
