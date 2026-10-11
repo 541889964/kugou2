@@ -18,26 +18,33 @@ class MainActivity: FlutterActivity() {
     private var recorder: MediaRecorder? = null
     private var outputPath: String? = null
     private var nodeProc: Process? = null
-    private val crashLog = File(cacheDir, "backend_crash.log")
+
+    // ✅ 修复：延迟获取，避免在构造函数里调 cacheDir 导致 NPE
+    private fun crashLogFile(): File = File(cacheDir, "backend_crash.log")
 
     private fun logCrash(tag: String, e: Throwable) {
         try {
-            crashLog.appendText("[${System.currentTimeMillis()}] $tag: ${e.javaClass.simpleName}: ${e.message}\n")
-            crashLog.appendText(e.stackTraceToString())
-            crashLog.appendText("\n---\n")
-        } catch (_: Exception) {}
+            crashLogFile().appendText(
+                "[${System.currentTimeMillis()}] $tag: " +
+                "${e.javaClass.simpleName}: ${e.message}\n" +
+                e.stackTraceToString() + "\n---\n")
+        } catch (_: Throwable) {}
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
+        // ---------- 录音通道 ----------
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, REC_CHANNEL)
             .setMethodCallHandler { call, result ->
                 try {
                     when (call.method) {
                         "start" -> {
                             val path = call.argument<String>("path")
-                            if (path == null) { result.error("NO_PATH", "缺少路径", null); return@setMethodCallHandler }
+                            if (path == null) {
+                                result.error("NO_PATH", "缺少路径", null)
+                                return@setMethodCallHandler
+                            }
                             recorder?.release()
                             recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                                 MediaRecorder(applicationContext)
@@ -67,10 +74,11 @@ class MainActivity: FlutterActivity() {
                     }
                 } catch (e: Throwable) {
                     logCrash("recorder", e)
-                    try { result.error("REC_FAIL", e.message ?: "录音失败", null) } catch (_: Exception) {}
+                    try { result.error("REC_FAIL", e.message ?: "失败", null) } catch (_: Throwable) {}
                 }
             }
 
+        // ---------- 后端通道 ----------
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BACKEND_CHANNEL)
             .setMethodCallHandler { call, result ->
                 val replied = AtomicBoolean(false)
@@ -82,11 +90,13 @@ class MainActivity: FlutterActivity() {
                 try {
                     when (call.method) {
                         "unpackNode" -> {
-                            val src = call.argument<String>("src")
-                            if (src == null) { safeReply { result.error("NO_SRC", "缺少源", null) }; return@setMethodCallHandler }
+                            val src = call.argument<String>("src") ?: run {
+                                safeReply { result.error("NO_SRC", "缺少源", null) }
+                                return@setMethodCallHandler
+                            }
                             Thread {
                                 try {
-                                    unpackTarGzSafely(File(src), File(filesDir, "backend_runtime"))
+                                    unpackTarGz(File(src), File(filesDir, "backend_runtime"))
                                     val binDir = File(filesDir, "backend_runtime/node/bin")
                                     binDir.listFiles()?.forEach { it.setExecutable(true, false) }
                                     File(filesDir, "backend_runtime/node/lib").listFiles()?.forEach {
@@ -100,13 +110,15 @@ class MainActivity: FlutterActivity() {
                             }.start()
                         }
                         "unpackBackend" -> {
-                            val src = call.argument<String>("src")
-                            if (src == null) { safeReply { result.error("NO_SRC", "缺少源", null) }; return@setMethodCallHandler }
+                            val src = call.argument<String>("src") ?: run {
+                                safeReply { result.error("NO_SRC", "缺少源", null) }
+                                return@setMethodCallHandler
+                            }
                             Thread {
                                 try {
                                     val dest = File(filesDir, "backend_runtime/backend")
                                     dest.mkdirs()
-                                    unpackTarGzSafely(File(src), dest)
+                                    unpackTarGz(File(src), dest)
                                     safeReply { result.success(true) }
                                 } catch (e: Throwable) {
                                     logCrash("unpackBackend", e)
@@ -120,7 +132,7 @@ class MainActivity: FlutterActivity() {
                             safeReply { result.success(node.exists() && app.exists()) }
                         }
                         "start" -> {
-                            val ok = try { startNodeSafely() } catch (e: Throwable) { logCrash("startNode", e); false }
+                            val ok = try { startNode() } catch (e: Throwable) { logCrash("startNode", e); false }
                             safeReply { result.success(ok) }
                         }
                         "stop" -> {
@@ -132,13 +144,13 @@ class MainActivity: FlutterActivity() {
                             try {
                                 nodeProc?.destroy(); nodeProc = null
                                 File(filesDir, "backend_runtime").deleteRecursively()
-                                crashLog.delete()
+                                crashLogFile().delete()
                             } catch (_: Throwable) {}
                             safeReply { result.success(true) }
                         }
                         "crashLog" -> {
                             val txt = try {
-                                if (crashLog.exists()) crashLog.readText() else ""
+                                if (crashLogFile().exists()) crashLogFile().readText() else ""
                             } catch (_: Throwable) { "" }
                             safeReply { result.success(txt) }
                         }
@@ -146,24 +158,21 @@ class MainActivity: FlutterActivity() {
                     }
                 } catch (e: Throwable) {
                     logCrash("channel", e)
-                    safeReply { result.error("CHANNEL_FAIL", e.message ?: "通道失败", null) }
+                    safeReply { result.error("CHANNEL_FAIL", e.message ?: "失败", null) }
                 }
             }
     }
 
-    private fun unpackTarGzSafely(tarGz: File, dest: File) {
+    private fun unpackTarGz(tarGz: File, dest: File) {
         if (!tarGz.exists()) throw Exception("源文件不存在: ${tarGz.absolutePath}")
-        if (tarGz.length() < 100) throw Exception("源文件太小: ${tarGz.length()}")
+        if (tarGz.length() < 100) throw Exception("源文件太小")
         dest.mkdirs()
-        GZIPInputStream(BufferedInputStream(tarGz.inputStream(), 65536)).use { gz ->
-            untar(gz, dest)
-        }
+        GZIPInputStream(BufferedInputStream(tarGz.inputStream(), 65536)).use { gz -> untar(gz, dest) }
     }
 
     private fun untar(input: InputStream, dest: File) {
         val header = ByteArray(512)
         var longName: String? = null
-        var files = 0
         while (true) {
             val read = input.readNBytes(header, 0, 512)
             if (read < 512) break
@@ -171,10 +180,8 @@ class MainActivity: FlutterActivity() {
 
             val name = String(header, 0, 100, Charsets.UTF_8).trimEnd('\u0000', ' ')
             if (name.isEmpty()) break
-
-            val sizeStr = String(header, 124, 12, Charsets.UTF_8).trimEnd('\u0000', ' ', ' ')
+            val sizeStr = String(header, 124, 12, Charsets.UTF_8).trimEnd('\u0000', ' ')
             val size = try { if (sizeStr.isEmpty()) 0L else sizeStr.toLong(8) } catch (_: Exception) { 0L }
-
             val type = header[156].toInt().toChar()
             val prefix = String(header, 345, 155, Charsets.UTF_8).trimEnd('\u0000', ' ')
 
@@ -187,80 +194,67 @@ class MainActivity: FlutterActivity() {
                     r += n
                 }
                 longName = String(data, Charsets.UTF_8).trimEnd('\u0000', ' ')
-                val padding = ((512 - (size % 512)) % 512).toInt()
-                if (padding > 0) input.skip(padding.toLong())
+                val pad = ((512 - (size % 512)) % 512).toInt()
+                if (pad > 0) input.skip(pad.toLong())
                 continue
             }
 
             val baseName = longName ?: (if (prefix.isEmpty()) name else "$prefix/$name")
             longName = null
+            val safeName = baseName.replace("\\", "/").split("/")
+                .filter { it != ".." && it.isNotEmpty() }.joinToString("/")
 
-            // 防路径穿越
-            val safeName = baseName.replace("\\", "/").split("/").filter {
-                it != ".." && it.isNotEmpty()
-            }.joinToString("/")
-            if (safeName.isEmpty()) {
-                val padding = ((512 - (size % 512)) % 512).toInt()
-                if (padding > 0) input.skip(padding.toLong())
-                continue
-            }
-
-            val outFile = File(dest, safeName)
-            when (type) {
-                '5' -> { try { outFile.mkdirs() } catch (_: Throwable) {} }
-                '0', '\u0000', '7' -> {
-                    try {
-                        outFile.parentFile?.mkdirs()
-                        FileOutputStream(outFile).use { fos ->
-                            var remaining = size
-                            val buf = ByteArray(65536)
-                            while (remaining > 0) {
-                                val toRead = minOf(remaining, 65536L).toInt()
-                                val n = input.read(buf, 0, toRead)
-                                if (n <= 0) break
-                                fos.write(buf, 0, n)
-                                remaining -= n
+            if (safeName.isNotEmpty()) {
+                val outFile = File(dest, safeName)
+                when (type) {
+                    '5' -> { try { outFile.mkdirs() } catch (_: Throwable) {} }
+                    '0', '\u0000', '7' -> {
+                        try {
+                            outFile.parentFile?.mkdirs()
+                            FileOutputStream(outFile).use { fos ->
+                                var rem = size
+                                val buf = ByteArray(65536)
+                                while (rem > 0) {
+                                    val toRead = minOf(rem, 65536L).toInt()
+                                    val n = input.read(buf, 0, toRead)
+                                    if (n <= 0) break
+                                    fos.write(buf, 0, n)
+                                    rem -= n
+                                }
                             }
-                            fos.flush()
-                        }
-                        files++
-                    } catch (e: Throwable) {
-                        logCrash("untar-write:$safeName", e)
-                        // 跳过这个文件的数据
-                        var remaining = size
-                        val buf = ByteArray(8192)
-                        while (remaining > 0) {
-                            val toRead = minOf(remaining, 8192L).toInt()
-                            val n = input.read(buf, 0, toRead)
-                            if (n <= 0) break
-                            remaining -= n
+                        } catch (e: Throwable) {
+                            logCrash("untar:$safeName", e)
+                            var rem = size
+                            val buf = ByteArray(8192)
+                            while (rem > 0) {
+                                val n = input.read(buf, 0, minOf(rem, 8192L).toInt())
+                                if (n <= 0) break
+                                rem -= n
+                            }
                         }
                     }
-                }
-                else -> {
-                    // 其他类型跳过
-                    var remaining = size
-                    val buf = ByteArray(8192)
-                    while (remaining > 0) {
-                        val toRead = minOf(remaining, 8192L).toInt()
-                        val n = input.read(buf, 0, toRead)
-                        if (n <= 0) break
-                        remaining -= n
+                    else -> {
+                        var rem = size
+                        val buf = ByteArray(8192)
+                        while (rem > 0) {
+                            val n = input.read(buf, 0, minOf(rem, 8192L).toInt())
+                            if (n <= 0) break
+                            rem -= n
+                        }
                     }
                 }
             }
-            val padding = ((512 - (size % 512)) % 512).toInt()
-            if (padding > 0) input.skip(padding.toLong())
+            val pad = ((512 - (size % 512)) % 512).toInt()
+            if (pad > 0) input.skip(pad.toLong())
         }
-        android.util.Log.i("KuGou", "untar done: $files files")
     }
 
-    private fun startNodeSafely(): Boolean {
+    private fun startNode(): Boolean {
         val root = File(filesDir, "backend_runtime")
         val node = File(root, "node/bin/node")
         val app = File(root, "backend/app.js")
-        if (!node.exists()) throw Exception("node 不存在: ${node.absolutePath}")
-        if (!app.exists()) throw Exception("app.js 不存在: ${app.absolutePath}")
+        if (!node.exists()) throw Exception("node 不存在")
+        if (!app.exists()) throw Exception("app.js 不存在")
 
         nodeProc?.destroy(); nodeProc = null
 
@@ -276,7 +270,6 @@ class MainActivity: FlutterActivity() {
         env["TMPDIR"] = cacheDir.absolutePath
 
         nodeProc = pb.start()
-
         Thread {
             try {
                 val r = nodeProc?.inputStream?.bufferedReader() ?: return@Thread
@@ -287,11 +280,9 @@ class MainActivity: FlutterActivity() {
             } catch (_: Throwable) {}
         }.start()
 
-        // 等 1 秒看进程是否已死
         Thread.sleep(1000)
         if (nodeProc?.isAlive != true) {
-            val exit = nodeProc?.exitValue()
-            throw Exception("node 进程立即退出 (code=$exit)，可能是不兼容 arm64")
+            throw Exception("node 进程立即退出 (code=${nodeProc?.exitValue()})")
         }
         return true
     }

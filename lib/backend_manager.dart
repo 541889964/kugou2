@@ -3,25 +3,24 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum LogLevel { info, ok, warn, err }
 
 class TermLine {
   final String text;
   final LogLevel level;
-  final DateTime time;
-  TermLine(this.text, this.level) : time = DateTime.now();
+  TermLine(this.text, this.level);
 }
 
 class BackendManager {
   static const _ch = MethodChannel('kugou/backend');
   static const _owner = '541889964';
   static const _repo = 'kugou2';
-  static const _backendTag = 'backend-runtime-v1';
+  static const _tag = 'backend-runtime-v1';
 
   static final _logCtrl = StreamController<TermLine>.broadcast();
   static Stream<TermLine> get logs => _logCtrl.stream;
-
   static final _progressCtrl = StreamController<double>.broadcast();
   static Stream<double> get progress => _progressCtrl.stream;
 
@@ -30,7 +29,6 @@ class BackendManager {
   }
   static void _emit(double v) => _progressCtrl.add(v.clamp(0.0, 1.0));
 
-  // 测速候选镜像
   static const _mirrors = [
     'https://gh-proxy.com',
     'https://ghfast.top',
@@ -39,259 +37,266 @@ class BackendManager {
     '',
   ];
 
-  /// 对每个镜像测速，返回最快的一个
+  // ============ 版本管理 ============
+  static const _verKey = 'backend_ver';
+
+  static Future<String> getLocalVersion() async {
+    final sp = await SharedPreferences.getInstance();
+    return sp.getString(_verKey) ?? '';
+  }
+
+  static Future<void> _setLocalVersion(String v) async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString(_verKey, v);
+  }
+
+  /// 检查远端最新版本 + 状态
+  /// 返回 { hasUpdate: bool, remoteVer: String, localVer: String, installed: bool, error: String? }
+  static Future<Map<String, dynamic>> checkUpdate() async {
+    final installed = await isInstalled();
+    final localVer = await getLocalVersion();
+    try {
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10)));
+      // 走加速
+      final api = 'https://api.github.com/repos/$_owner/$_repo/releases/tags/$_tag';
+      final r = await dio.get(api,
+        options: Options(validateStatus: (_) => true,
+          headers: {'User-Agent': 'KuGou-App'}));
+      if (r.statusCode != 200) {
+        return {'hasUpdate': false, 'remoteVer': '', 'localVer': localVer,
+          'installed': installed, 'error': 'GitHub API ${r.statusCode}'};
+      }
+      final d = r.data is Map ? r.data as Map : {};
+      final remoteVer = (d['published_at'] ?? d['created_at'] ?? '').toString();
+      final hasUpdate = !installed || localVer.isEmpty || localVer != remoteVer;
+      return {
+        'hasUpdate': hasUpdate,
+        'remoteVer': remoteVer,
+        'localVer': localVer,
+        'installed': installed,
+        'error': null,
+      };
+    } catch (e) {
+      return {'hasUpdate': false, 'remoteVer': '', 'localVer': localVer,
+        'installed': installed, 'error': '$e'};
+    }
+  }
+
+  // ============ 测速 ============
   static Future<String> _fastestMirror() async {
     log('开始测速（5 个源）…');
     final dio = Dio(BaseOptions(
       connectTimeout: const Duration(seconds: 3),
       receiveTimeout: const Duration(seconds: 3)));
-    final testUrl = 'https://github.com/$_owner/$_repo/releases/download/$_backendTag/node-arm64.tar.gz';
+    final testUrl = 'https://github.com/$_owner/$_repo/releases/download/$_tag/node-arm64.tar.gz';
 
-    final futures = _mirrors.map((m) async {
+    final results = await Future.wait(_mirrors.map((m) async {
       final url = m.isEmpty ? testUrl : '$m/$testUrl';
       final sw = Stopwatch()..start();
       try {
         await dio.head(url, options: Options(validateStatus: (_) => true));
         sw.stop();
-        final ms = sw.elapsedMilliseconds;
-        log('  ${m.isEmpty ? "GitHub 直连" : m.padRight(24)}  ${ms}ms');
-        return MapEntry(m, ms);
-      } catch (e) {
+        log('  ${m.isEmpty ? "GitHub 直连" : m.padRight(24)}  ${sw.elapsedMilliseconds}ms');
+        return MapEntry(m, sw.elapsedMilliseconds);
+      } catch (_) {
         sw.stop();
         log('  ${m.isEmpty ? "GitHub 直连" : m.padRight(24)}  超时', LogLevel.warn);
         return MapEntry(m, 999999);
       }
-    }).toList();
+    }));
 
-    final results = await Future.wait(futures);
     results.sort((a, b) => a.value.compareTo(b.value));
     final best = results.first;
     log('选择: ${best.key.isEmpty ? "GitHub 直连" : best.key}  (${best.value}ms)', LogLevel.ok);
     return best.key;
   }
 
-  static Future<File> _download(
-    String fileName,
-    String destPath,
-    String mirror, {
-    required String label,
-  }) async {
+  static Future<File> _download(String fileName, String destPath, String mirror, String label) async {
     final file = File(destPath);
     if (await file.exists()) await file.delete();
 
     final url = mirror.isEmpty
-      ? 'https://github.com/$_owner/$_repo/releases/download/$_backendTag/$fileName'
-      : '$mirror/https://github.com/$_owner/$_repo/releases/download/$_backendTag/$fileName';
-    log('下载 URL: $url');
+      ? 'https://github.com/$_owner/$_repo/releases/download/$_tag/$fileName'
+      : '$mirror/https://github.com/$_owner/$_repo/releases/download/$_tag/$fileName';
+    log('下载: $fileName');
 
     final dio = Dio(BaseOptions(
       connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(minutes: 5),
-      followRedirects: true));
-
-    try {
-      await dio.download(url, destPath, onReceiveProgress: (r, t) {
-        if (t > 0) {
-          final pct = (r / t * 100).toStringAsFixed(1);
-          final mb = (r / 1024 / 1024).toStringAsFixed(2);
-          final tmb = (t / 1024 / 1024).toStringAsFixed(2);
-          log('$label  $pct%  $mb MB / $tmb MB');
-          _emit(r / t * 0.8);
-        }
-      });
-      final size = await File(destPath).length();
-      if (size < 1024) throw Exception('文件太小');
-      log('$label 下载完成 (${(size / 1024 / 1024).toStringAsFixed(2)} MB)', LogLevel.ok);
-      return File(destPath);
-    } catch (e) {
-      log('$label 下载失败: $e', LogLevel.err);
-      rethrow;
-    }
+      receiveTimeout: const Duration(minutes: 5)));
+    await dio.download(url, destPath, onReceiveProgress: (r, t) {
+      if (t > 0) {
+        final pct = (r / t * 100).toStringAsFixed(1);
+        final mb = (r / 1024 / 1024).toStringAsFixed(2);
+        final tmb = (t / 1024 / 1024).toStringAsFixed(2);
+        log('$label  $pct%  $mb / $tmb MB');
+        _emit(r / t * 0.8);
+      }
+    });
+    final size = await File(destPath).length();
+    if (size < 1024) throw Exception('$fileName 太小');
+    log('$label 完成 (${(size / 1024 / 1024).toStringAsFixed(2)} MB)', LogLevel.ok);
+    return File(destPath);
   }
 
-  static Future<bool> setupAndStart() async {
+  // ============ 主流程 ============
+  static Future<bool> setupAndStart({bool forceUpdate = false}) async {
     try {
       _emit(0.0);
       log('═══ 初始化后端 ═══');
       log('');
 
-      // 先检查是否已解压
-      log('【0/3】检查本地是否已有后端');
-      final installed = await isInstalled();
-      if (installed) {
-        log('已检测到本地后端，跳过下载', LogLevel.ok);
-        log('');
-        log('启动 Node 进程…');
-        final started = await _ch.invokeMethod<bool>('start');
-        if (started != true) { log('启动失败', LogLevel.err); return false; }
-
-        log('等待后端响应 (最多 30 秒)…');
-        final dio0 = Dio(BaseOptions(
-          connectTimeout: const Duration(seconds: 2),
-          receiveTimeout: const Duration(seconds: 2)));
-        bool online0 = false;
-        for (int i = 0; i < 30; i++) {
-          await Future.delayed(const Duration(seconds: 1));
-          try {
-            final r = await dio0.get('http://127.0.0.1:3000/',
-              options: Options(validateStatus: (_) => true));
-            if (r.statusCode != null && r.statusCode! < 500) {
-              online0 = true;
-              log('后端响应正常 (HTTP ${r.statusCode})', LogLevel.ok);
-              break;
-            }
-          } catch (_) {}
-          log('等待中… ${i + 1}s');
-        }
-        _emit(1.0);
-        if (online0) {
-          log('');
-          log('✓✓✓ 后端启动成功 :3000', LogLevel.ok);
-          return true;
-        }
-        log('后端未响应', LogLevel.warn);
-        return false;
+      log('【0/4】检查版本');
+      final upd = await checkUpdate();
+      if (upd['error'] != null) {
+        log('检查失败: ${upd['error']}（继续用本地）', LogLevel.warn);
+      } else if (upd['hasUpdate'] == true) {
+        log('远端版本: ${upd['remoteVer']}', LogLevel.ok);
+        log('本地版本: ${upd['localVer'].isEmpty ? "未安装" : upd['localVer']}');
+      } else {
+        log('已是最新版本', LogLevel.ok);
       }
-
-      log('未检测到本地后端，开始下载', LogLevel.info);
       log('');
 
-      // 测速
-      log('【0/3】选择最快镜像');
+      final installed = upd['installed'] == true;
+      final needDownload = forceUpdate || !installed || upd['hasUpdate'] == true;
+
+      // 已装 + 无需更新 → 直接启动
+      if (installed && !needDownload) {
+        log('【1/4】本地已有后端，跳过下载');
+        log('');
+        log('【4/4】启动 Node 进程…');
+        return await _startAndWait();
+      }
+
+      // 需要下载
+      if (installed && forceUpdate) {
+        log('【1/4】强制更新：清空旧文件', LogLevel.warn);
+        try { await _ch.invokeMethod<bool>('clear'); } catch (_) {}
+      }
+
+      log('【1/4】选择最快镜像');
       final mirror = await _fastestMirror();
       log('');
-
       final temp = await getTemporaryDirectory();
 
-      // 1+2. 并发下载两个文件
-      log('【1/3】并发下载 Node 和 Backend (~80MB)');
+      log('【2/4】并发下载 Node + Backend');
       final results = await Future.wait([
-        _download('node-arm64.tar.gz', '${temp.path}/node-arm64.tar.gz',
-            mirror, label: 'Node').then((f) => {'ok': true, 'file': f}).catchError((e) =>
-            {'ok': false, 'err': e.toString()}),
-        _download('backend.tar.gz', '${temp.path}/backend.tar.gz',
-            mirror, label: 'Backend').then((f) => {'ok': true, 'file': f}).catchError((e) =>
-            {'ok': false, 'err': e.toString()}),
+        _download('node-arm64.tar.gz', '${temp.path}/node-arm64.tar.gz', mirror, 'Node')
+          .then((f) => {'ok': true, 'file': f})
+          .catchError((e) => {'ok': false, 'err': e.toString()}),
+        _download('backend.tar.gz', '${temp.path}/backend.tar.gz', mirror, 'Backend')
+          .then((f) => {'ok': true, 'file': f})
+          .catchError((e) => {'ok': false, 'err': e.toString()}),
       ]);
-
-      if (results[0]['ok'] != true) {
-        log('Node 下载失败: ${results[0]['err']}', LogLevel.err);
-        log('');
-        log('提示: 手机下载速度慢/网络不稳时，可多试几次', LogLevel.warn);
-        return false;
-      }
-      if (results[1]['ok'] != true) {
-        log('Backend 下载失败: ${results[1]['err']}', LogLevel.err);
-        return false;
-      }
+      if (results[0]['ok'] != true) { log('Node 下载失败: ${results[0]['err']}', LogLevel.err); return false; }
+      if (results[1]['ok'] != true) { log('Backend 下载失败: ${results[1]['err']}', LogLevel.err); return false; }
       final nodeTgz = results[0]['file'] as File;
       final backendTgz = results[1]['file'] as File;
       _emit(0.70);
 
-      // 解压 Node
       log('');
-      log('【2/3】解压 Node');
-      final okNode = await _ch.invokeMethod<bool>('unpackNode', {'src': nodeTgz.path});
-      if (okNode != true) {
-        final crash = await getCrashLog();
+      log('【3/4】解压');
+      final okN = await _ch.invokeMethod<bool>('unpackNode', {'src': nodeTgz.path});
+      if (okN != true) {
         log('Node 解压失败', LogLevel.err);
-        if (crash.isNotEmpty) {
-          log('--- 崩溃日志 ---', LogLevel.err);
-          for (final line in crash.split('\n').take(30)) log(line, LogLevel.err);
-        }
+        await _dumpCrash();
         return false;
       }
       log('Node 解压完成', LogLevel.ok);
-      _emit(0.90);
-
-      // 解压 Backend
-      log('解压 Backend…');
-      final okBk = await _ch.invokeMethod<bool>('unpackBackend', {'src': backendTgz.path});
-      if (okBk != true) {
-        final crash = await getCrashLog();
-        log('后端解压失败', LogLevel.err);
-        if (crash.isNotEmpty) {
-          for (final line in crash.split('\n').take(30)) log(line, LogLevel.err);
-        }
+      final okB = await _ch.invokeMethod<bool>('unpackBackend', {'src': backendTgz.path});
+      if (okB != true) {
+        log('Backend 解压失败', LogLevel.err);
+        await _dumpCrash();
         return false;
       }
-      log('后端解压完成', LogLevel.ok);
+      log('Backend 解压完成', LogLevel.ok);
 
       try { await nodeTgz.delete(); await backendTgz.delete(); } catch (_) {}
       _emit(0.95);
 
-      log('');
-      log('启动 Node 进程…');
-      final started = await _ch.invokeMethod<bool>('start');
-      if (started != true) {
-        final crash = await getCrashLog();
-        log('启动失败', LogLevel.err);
-        if (crash.isNotEmpty) {
-          log('--- 崩溃日志 ---', LogLevel.err);
-          for (final line in crash.split('\n').take(20)) log(line, LogLevel.err);
-        }
-        log('可能原因：node 二进制与 Android 沙箱不兼容', LogLevel.warn);
-        log('请用「调起 Termux」方式（设置里）', LogLevel.warn);
-        return false;
+      // 记录版本
+      if (upd['remoteVer'] != null && (upd['remoteVer'] as String).isNotEmpty) {
+        await _setLocalVersion(upd['remoteVer'] as String);
       }
 
-      log('等待后端响应 (最多 30 秒)…');
-      final dio = Dio(BaseOptions(
-        connectTimeout: const Duration(seconds: 2),
-        receiveTimeout: const Duration(seconds: 2)));
-      bool online = false;
-      for (int i = 0; i < 30; i++) {
-        await Future.delayed(const Duration(seconds: 1));
-        try {
-          final r = await dio.get('http://127.0.0.1:3000/',
-            options: Options(validateStatus: (_) => true));
-          if (r.statusCode != null && r.statusCode! < 500) {
-            online = true;
-            log('后端响应正常 (HTTP ${r.statusCode})', LogLevel.ok);
-            break;
-          }
-        } catch (_) {}
-        log('等待中… ${i + 1}s');
-      }
-      _emit(1.0);
-      if (online) {
-        log('');
-        log('✓✓✓ 后端启动成功 :3000', LogLevel.ok);
-        return true;
-      }
-      log('后端未在 30 秒内响应', LogLevel.warn);
-      return false;
+      log('');
+      log('【4/4】启动 Node 进程…');
+      return await _startAndWait();
     } catch (e) {
       log('失败: $e', LogLevel.err);
       return false;
     }
   }
 
-  /// 读原生崩溃日志
-  static Future<String> getCrashLog() async {
-    try { return await _ch.invokeMethod<String>('crashLog') ?? ''; }
-    catch (_) { return ''; }
+  static Future<bool> _startAndWait() async {
+    final started = await _ch.invokeMethod<bool>('start');
+    if (started != true) {
+      log('启动失败', LogLevel.err);
+      await _dumpCrash();
+      return false;
+    }
+    log('等待后端响应 (最多 30 秒)…');
+    final dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 2),
+      receiveTimeout: const Duration(seconds: 2)));
+    for (int i = 0; i < 30; i++) {
+      await Future.delayed(const Duration(seconds: 1));
+      try {
+        final r = await dio.get('http://127.0.0.1:3000/',
+          options: Options(validateStatus: (_) => true));
+        if (r.statusCode != null && r.statusCode! < 500) {
+          _emit(1.0);
+          log('');
+          log('✓✓✓ 后端启动成功 :3000', LogLevel.ok);
+          return true;
+        }
+      } catch (_) {}
+      log('等待中… ${i + 1}s');
+    }
+    _emit(1.0);
+    log('后端未在 30 秒内响应', LogLevel.warn);
+    return false;
   }
 
+  static Future<void> _dumpCrash() async {
+    final crash = await getCrashLog();
+    if (crash.isNotEmpty) {
+      log('--- 崩溃日志 ---', LogLevel.err);
+      for (final line in crash.split('\n').take(30)) log(line, LogLevel.err);
+    }
+  }
+
+  // ============ 基础 API ============
   static Future<bool> isInstalled() async {
     try { return await _ch.invokeMethod<bool>('unpacked') ?? false; }
     catch (_) { return false; }
   }
+
   static Future<bool> isRunning() async {
     try { return await _ch.invokeMethod<bool>('running') ?? false; }
     catch (_) { return false; }
   }
+
   static Future<bool> start() async {
     try { return await _ch.invokeMethod<bool>('start') ?? false; }
     catch (_) { return false; }
   }
+
   static Future<bool> stop() async {
     try { return await _ch.invokeMethod<bool>('stop') ?? false; }
     catch (_) { return false; }
   }
+
   static Future<bool> clear() async {
     try { return await _ch.invokeMethod<bool>('clear') ?? false; }
     catch (_) { return false; }
+  }
+
+  static Future<String> getCrashLog() async {
+    try { return await _ch.invokeMethod<String>('crashLog') ?? ''; }
+    catch (_) { return ''; }
   }
 
   static Future<bool> isOnline(int port) async {
@@ -303,17 +308,4 @@ class BackendManager {
   }
   static Future<bool> isLiteOnline() => isOnline(3000);
   static Future<bool> isStandardOnline() => isOnline(3001);
-
-  // ============= 兼容旧 API =============
-  static const startScriptPath = '/storage/emulated/0/Download/kugou-backend-start.sh';
-  static const stopScriptPath = '/storage/emulated/0/Download/kugou-backend-stop.sh';
-  static const startCmd = 'bash /storage/emulated/0/Download/kugou-backend-start.sh';
-  static const stopCmd = 'bash /storage/emulated/0/Download/kugou-backend-stop.sh';
-
-  static Future<(bool, String)> generateScripts() async =>
-      (false, '已改用内嵌后端');
-  static Future<bool> startScriptExists() async => false;
-  static Future<String?> getGithubUrl() async => null;
-  static Future<void> setGithubUrl(String _) async {}
-  static Future<void> clearGithubUrl() async {}
 }
