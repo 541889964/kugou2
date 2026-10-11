@@ -124,7 +124,7 @@ class _SP extends State<SettingsPage> {
             onPressed: () {
               Navigator.pop(context);
               Navigator.push(context, MaterialPageRoute(
-                builder: (_) => const TerminalPage(autoStart: true)))
+                builder: (_) => const TerminalPage()))
                 .then((_) => _refreshBackend());
             },
             child: const Text('立即更新')),

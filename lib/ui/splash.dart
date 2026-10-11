@@ -80,7 +80,7 @@ class _S extends State<SplashPage> with TickerProviderStateMixin {
         if (!installed) {
           setState(() { _st = '下载后端运行时 (62MB)…'; _dlActive = true; });
           // 异步启动，不阻塞
-          unawaited(BackendManager.setupAndStart());
+          unawaited(BackendManager.downloadRuntime());
         } else {
           setState(() => _st = '启动后端服务…');
           unawaited(BackendManager.start());
