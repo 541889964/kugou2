@@ -25,14 +25,12 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   final ScrollController _scroll = ScrollController();
   StreamSubscription? _logSub;
   StreamSubscription? _progSub;
-
   double _progress = 0;
   bool _busy = false;
   bool _installed = false;
   bool _running = false;
   bool _lastOk = false;
   String _currentTask = '';
-
   late final AnimationController _scanCtrl;
   late final AnimationController _blinkCtrl;
   late final AnimationController _clockCtrl;
@@ -40,13 +38,9 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _scanCtrl = AnimationController(vsync: this,
-      duration: const Duration(seconds: 4))..repeat();
-    _blinkCtrl = AnimationController(vsync: this,
-      duration: const Duration(milliseconds: 800))..repeat(reverse: true);
-    _clockCtrl = AnimationController(vsync: this,
-      duration: const Duration(seconds: 1))..repeat();
-
+    _scanCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
+    _blinkCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat(reverse: true);
+    _clockCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat();
     _logSub = BackendManager.logs.listen(_onLog);
     _progSub = BackendManager.progress.listen((p) {
       if (mounted) setState(() => _progress = p);
@@ -169,8 +163,7 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
       decoration: BoxDecoration(
         color: _H.panel.withOpacity(0.9),
         border: Border.all(color: _H.green.withOpacity(0.4), width: 0.8),
-        boxShadow: [BoxShadow(color: _H.green.withOpacity(0.18),
-          blurRadius: 14, spreadRadius: -2)]),
+        boxShadow: [BoxShadow(color: _H.green.withOpacity(0.18), blurRadius: 14, spreadRadius: -2)]),
       child: Row(children: [
         GestureDetector(
           onTap: () => Navigator.pop(context, _lastOk),
@@ -181,9 +174,9 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
               borderRadius: BorderRadius.circular(4)),
             child: Icon(Icons.arrow_back_ios_new, size: 12, color: _H.green))),
         const SizedBox(width: 10),
-        _blinkDot(_H.red), const SizedBox(width: 5),
-        _blinkDot(_H.amber), const SizedBox(width: 5),
-        _blinkDot(_H.green),
+        _dot(_H.red), const SizedBox(width: 5),
+        _dot(_H.amber), const SizedBox(width: 5),
+        _dot(_H.green),
         const SizedBox(width: 12),
         Expanded(child: Text('root@kugou:~/backend#',
           style: TextStyle(fontFamily: 'monospace', fontSize: 12,
@@ -211,8 +204,10 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
       ]));
   }
 
-  Widget _blinkDot(Color c) => Container(width: 10, height: 10,
-    decoration: BoxDecoration(shape: BoxShape.circle, color: c));
+  Widget _dot(Color c) {
+    return Container(width: 10, height: 10,
+      decoration: BoxDecoration(shape: BoxShape.circle, color: c));
+  }
 
   Widget _actionBar() {
     return Container(
@@ -221,8 +216,7 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
       decoration: BoxDecoration(
         color: _H.panel.withOpacity(0.7),
         border: Border.all(color: _H.green.withOpacity(0.28), width: 0.8)),
-      child: _installed ? _installedActions() : _firstTimeActions(),
-    );
+      child: _installed ? _installedActions() : _firstTimeActions());
   }
 
   Widget _firstTimeActions() {
@@ -236,15 +230,13 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
       ]),
       const SizedBox(height: 10),
       Text('Node 运行时 + KuGouMusicApi',
-        style: TextStyle(fontFamily: 'monospace', fontSize: 10,
-          color: _H.greenDim)),
+        style: TextStyle(fontFamily: 'monospace', fontSize: 10, color: _H.greenDim)),
       const SizedBox(height: 14),
-      SizedBox(width: double.infinity,
-        child: _bigBtn(
-          label: _busy ? '下载中…' : '> 下载运行环境',
-          color: _H.cyan,
-          enabled: !_busy,
-          onTap: () => _run(() => BackendManager.downloadRuntime(), '下载'))),
+      _bigBtn(
+        label: _busy ? '下载中…' : '> 下载运行环境',
+        color: _H.cyan,
+        enabled: !_busy,
+        onTap: () => _run(BackendManager.downloadRuntime, '下载')),
       if (_busy) ...[
         const SizedBox(height: 12),
         _progressBar(),
@@ -277,13 +269,13 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
           label: _busy && _currentTask == '更新' ? '更新中…' : '> 更新后端',
           color: _H.amber,
           enabled: !_busy,
-          onTap: () => _run(() => BackendManager.updateBackendOnly(), '更新'))),
+          onTap: () => _run(BackendManager.updateBackendOnly, '更新'))),
         const SizedBox(width: 12),
         Expanded(child: _bigBtn(
           label: _busy && _currentTask == '执行' ? '启动中…' : '> 执行',
           color: _H.green,
           enabled: !_busy,
-          onTap: () => _run(() => BackendManager.executeOnly(), '执行'))),
+          onTap: () => _run(BackendManager.executeOnly, '执行'))),
       ]),
       const SizedBox(height: 10),
       Text('「更新」= 拉最新 KuGouMusicApi    「执行」= 启动后端',
@@ -294,7 +286,8 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
         _progressBar(),
       ],
       if (_lastOk && !_busy)
-        Padding(padding: const EdgeInsets.only(top: 8),
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
           child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             Icon(Icons.check_circle_outline, size: 12, color: _H.green),
             const SizedBox(width: 5),
@@ -318,13 +311,12 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
           color: enabled ? color.withOpacity(0.15) : Colors.grey.withOpacity(0.1),
           border: Border.all(color: color.withOpacity(enabled ? 0.7 : 0.3), width: 1.2),
           borderRadius: BorderRadius.circular(6),
-          boxShadow: enabled ? [BoxShadow(
-            color: color.withOpacity(0.4),
+          boxShadow: enabled ? [BoxShadow(color: color.withOpacity(0.4),
             blurRadius: 12, spreadRadius: -2)] : null),
         child: Center(child: Text(label, style: TextStyle(
           fontFamily: 'monospace', fontSize: 13,
           color: enabled ? color : Colors.grey,
-          fontWeight: FontWeight.w900, letterSpacing: 1))));
+          fontWeight: FontWeight.w900, letterSpacing: 1)))));
   }
 
   Widget _progressBar() {
@@ -352,7 +344,8 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
         boxShadow: [BoxShadow(color: _H.green.withOpacity(0.12),
           blurRadius: 16, spreadRadius: -5)]),
       child: Stack(children: [
-        Positioned(top: 0, left: 0, right: 0,
+        Positioned(
+          top: 0, left: 0, right: 0,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
@@ -370,23 +363,29 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
                 fontWeight: FontWeight.w700)),
             ]))),
         Positioned.fill(top: 26,
-          child: _lines.isEmpty
-            ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(Icons.memory, size: 44, color: _H.greenDim.withOpacity(0.35)),
-                const SizedBox(height: 10),
-                Text('> 等待操作...', style: TextStyle(
-                  fontFamily: 'monospace', fontSize: 13, color: _H.greenDim)),
-                const SizedBox(height: 6),
-                AnimatedBuilder(animation: _blinkCtrl, builder: (_, __) =>
-                  Container(width: 9, height: 15,
-                    color: _H.green.withOpacity(_blinkCtrl.value))),
-              ]))
-            : ListView.builder(
-                controller: _scroll,
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                itemCount: _lines.length,
-                itemBuilder: _logLine)),
+          child: _lines.isEmpty ? _emptyConsole() : _consoleList()),
       ]));
+  }
+
+  Widget _emptyConsole() {
+    return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      Icon(Icons.memory, size: 44, color: _H.greenDim.withOpacity(0.35)),
+      const SizedBox(height: 10),
+      Text('> 等待操作...', style: TextStyle(
+        fontFamily: 'monospace', fontSize: 13, color: _H.greenDim)),
+      const SizedBox(height: 6),
+      AnimatedBuilder(animation: _blinkCtrl, builder: (_, __) =>
+        Container(width: 9, height: 15,
+          color: _H.green.withOpacity(_blinkCtrl.value))),
+    ]));
+  }
+
+  Widget _consoleList() {
+    return ListView.builder(
+      controller: _scroll,
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+      itemCount: _lines.length,
+      itemBuilder: _logLine);
   }
 
   Widget _logLine(BuildContext ctx, int i) {
@@ -444,8 +443,7 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
               border: Border.all(color: _H.greenDim.withOpacity(0.5)),
               borderRadius: BorderRadius.circular(4)),
             child: Row(children: [
-              Icon(Icons.cleaning_services_outlined,
-                size: 12, color: _H.greenDim),
+              Icon(Icons.cleaning_services_outlined, size: 12, color: _H.greenDim),
               const SizedBox(width: 4),
               Text('清除', style: TextStyle(
                 fontFamily: 'monospace', fontSize: 10,
