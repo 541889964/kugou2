@@ -163,28 +163,58 @@ class BackendManager {
 
       final temp = await getTemporaryDirectory();
 
-      // 1. 下载 Node
-      log('【1/3】下载 Node 运行时 (arm64, ~40MB)');
-      final nodeTgz = await _download('node-arm64.tar.gz',
-        '${temp.path}/node-arm64.tar.gz', mirror, label: 'Node');
+      // 1+2. 并发下载两个文件
+      log('【1/3】并发下载 Node 和 Backend (~80MB)');
+      final results = await Future.wait([
+        _download('node-arm64.tar.gz', '${temp.path}/node-arm64.tar.gz',
+            mirror, label: 'Node').then((f) => {'ok': true, 'file': f}).catchError((e) =>
+            {'ok': false, 'err': e.toString()}),
+        _download('backend.tar.gz', '${temp.path}/backend.tar.gz',
+            mirror, label: 'Backend').then((f) => {'ok': true, 'file': f}).catchError((e) =>
+            {'ok': false, 'err': e.toString()}),
+      ]);
 
-      // 2. 解压 Node
+      if (results[0]['ok'] != true) {
+        log('Node 下载失败: ${results[0]['err']}', LogLevel.err);
+        log('');
+        log('提示: 手机下载速度慢/网络不稳时，可多试几次', LogLevel.warn);
+        return false;
+      }
+      if (results[1]['ok'] != true) {
+        log('Backend 下载失败: ${results[1]['err']}', LogLevel.err);
+        return false;
+      }
+      final nodeTgz = results[0]['file'] as File;
+      final backendTgz = results[1]['file'] as File;
+      _emit(0.70);
+
+      // 解压 Node
       log('');
-      log('【2/3】解压 Node 到私有目录（约 20 秒）');
+      log('【2/3】解压 Node');
       final okNode = await _ch.invokeMethod<bool>('unpackNode', {'src': nodeTgz.path});
-      if (okNode != true) { log('Node 解压失败', LogLevel.err); return false; }
+      if (okNode != true) {
+        final crash = await getCrashLog();
+        log('Node 解压失败', LogLevel.err);
+        if (crash.isNotEmpty) {
+          log('--- 崩溃日志 ---', LogLevel.err);
+          for (final line in crash.split('\n').take(30)) log(line, LogLevel.err);
+        }
+        return false;
+      }
       log('Node 解压完成', LogLevel.ok);
-      _emit(0.85);
+      _emit(0.90);
 
-      // 3. 下载 backend
-      log('');
-      log('【3/3】下载 KuGouMusicApi 后端 (~40MB)');
-      final backendTgz = await _download('backend.tar.gz',
-        '${temp.path}/backend.tar.gz', mirror, label: 'Backend');
-
-      log('解压后端…');
+      // 解压 Backend
+      log('解压 Backend…');
       final okBk = await _ch.invokeMethod<bool>('unpackBackend', {'src': backendTgz.path});
-      if (okBk != true) { log('后端解压失败', LogLevel.err); return false; }
+      if (okBk != true) {
+        final crash = await getCrashLog();
+        log('后端解压失败', LogLevel.err);
+        if (crash.isNotEmpty) {
+          for (final line in crash.split('\n').take(30)) log(line, LogLevel.err);
+        }
+        return false;
+      }
       log('后端解压完成', LogLevel.ok);
 
       try { await nodeTgz.delete(); await backendTgz.delete(); } catch (_) {}
@@ -193,7 +223,17 @@ class BackendManager {
       log('');
       log('启动 Node 进程…');
       final started = await _ch.invokeMethod<bool>('start');
-      if (started != true) { log('启动失败', LogLevel.err); return false; }
+      if (started != true) {
+        final crash = await getCrashLog();
+        log('启动失败', LogLevel.err);
+        if (crash.isNotEmpty) {
+          log('--- 崩溃日志 ---', LogLevel.err);
+          for (final line in crash.split('\n').take(20)) log(line, LogLevel.err);
+        }
+        log('可能原因：node 二进制与 Android 沙箱不兼容', LogLevel.warn);
+        log('请用「调起 Termux」方式（设置里）', LogLevel.warn);
+        return false;
+      }
 
       log('等待后端响应 (最多 30 秒)…');
       final dio = Dio(BaseOptions(
@@ -225,6 +265,12 @@ class BackendManager {
       log('失败: $e', LogLevel.err);
       return false;
     }
+  }
+
+  /// 读原生崩溃日志
+  static Future<String> getCrashLog() async {
+    try { return await _ch.invokeMethod<String>('crashLog') ?? ''; }
+    catch (_) { return ''; }
   }
 
   static Future<bool> isInstalled() async {
