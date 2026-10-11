@@ -199,7 +199,7 @@ class BackendManager {
 
     // 3) 预分配文件
     final raf0 = await file.open(mode: FileMode.write);
-    await raf0.setLength(len);
+    await raf0.truncate(len);
     await raf0.close();
 
     final chunkSize = (len / threads).ceil();
