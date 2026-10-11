@@ -326,11 +326,11 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
       Row(children: [
         Expanded(child: _bigBtn(
           label: _busy && _currentTask == '更新' ? '更新中…' : '更新后端',
-          subtitle: '拉取最新 KuGouMusicApi',
+          subtitle: '从 GitHub 拉最新源码',
           icon: Icons.refresh,
           color: _C.amber,
           enabled: !_busy,
-          onTap: () => _run(BackendManager.updateBackendOnly, '更新'))),
+          onTap: () => _run(BackendManager.updateFromSource, '更新'))),
         const SizedBox(width: 12),
         Expanded(child: _bigBtn(
           label: _busy && _currentTask == '执行' ? '启动中…' : '执行',

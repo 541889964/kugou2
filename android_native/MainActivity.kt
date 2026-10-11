@@ -11,6 +11,7 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.GZIPInputStream
+import java.util.zip.ZipInputStream
 
 class MainActivity: FlutterActivity() {
     private val REC_CHANNEL = "kugou/recorder"
@@ -20,6 +21,7 @@ class MainActivity: FlutterActivity() {
     private var nodeProc: Process? = null
 
     private fun crashLogFile(): File = File(cacheDir, "backend_crash.log")
+    private fun npmLogFile(): File = File(cacheDir, "npm.log")
 
     private fun logCrash(tag: String, e: Throwable) {
         try {
@@ -147,6 +149,121 @@ class MainActivity: FlutterActivity() {
                             safeReply { result.success(true) }
                         }
                         "running" -> safeReply { result.success(nodeProc?.isAlive == true) }
+                        "extractSourceZip" -> {
+                            val zipPath = call.argument<String>("zip")
+                            val destRel = call.argument<String>("dest") ?: "backend_runtime/backend"
+                            if (zipPath == null) {
+                                safeReply { result.error("NO_ZIP", "缺少 zip", null) }
+                                return@setMethodCallHandler
+                            }
+                            Thread {
+                                try {
+                                    val zipFile = File(zipPath)
+                                    if (!zipFile.exists()) throw Exception("zip 不存在")
+                                    val dest = File(filesDir, destRel)
+                                    if (dest.exists()) dest.deleteRecursively()
+                                    dest.mkdirs()
+
+                                    ZipInputStream(zipFile.inputStream()).use { zis ->
+                                        var entry = zis.nextEntry
+                                        while (entry != null) {
+                                            val name = entry.name
+                                            val parts = name.split("/", limit = 2)
+                                            val rel = if (parts.size > 1) parts[1] else ""
+                                            if (rel.isNotEmpty()) {
+                                                val outFile = File(dest, rel)
+                                                if (entry.isDirectory) {
+                                                    outFile.mkdirs()
+                                                } else {
+                                                    outFile.parentFile?.mkdirs()
+                                                    FileOutputStream(outFile).use { fos ->
+                                                        val buf = ByteArray(65536)
+                                                        var n: Int
+                                                        while (zis.read(buf).also { n = it } > 0) {
+                                                            fos.write(buf, 0, n)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            zis.closeEntry()
+                                            entry = zis.nextEntry
+                                        }
+                                    }
+                                    safeReply { result.success(true) }
+                                } catch (e: Throwable) {
+                                    logCrash("extractZip", e)
+                                    safeReply { result.error("EXTRACT_FAIL", e.message ?: "", null) }
+                                }
+                            }.start()
+                        }
+                        "runNpmInstall" -> {
+                            Thread {
+                                try {
+                                    val root = File(filesDir, "backend_runtime")
+                                    val node = File(root, "node/bin/node")
+                                    val npmCli = File(root, "node/lib/node_modules/npm/bin/npm-cli.js")
+                                    val backend = File(root, "backend")
+
+                                    if (!node.exists()) throw Exception("node 不存在")
+                                    if (!npmCli.exists()) throw Exception("npm 缺失（tar 里没有）")
+                                    if (!File(backend, "package.json").exists()) throw Exception("package.json 不存在")
+
+                                    npmLogFile().writeText("=== npm install ===\n")
+
+                                    val pb = ProcessBuilder(
+                                        node.absolutePath, "--jitless",
+                                        npmCli.absolutePath, "install",
+                                        "--production", "--no-audit", "--no-fund"
+                                    )
+                                    pb.directory(backend)
+                                    pb.redirectErrorStream(true)
+                                    val env = pb.environment()
+                                    env["LD_LIBRARY_PATH"] = File(root, "node/lib").absolutePath
+                                    env["PATH"] = "${File(root, "node/bin").absolutePath}:/system/bin"
+                                    env["HOME"] = filesDir.absolutePath
+                                    env["TMPDIR"] = cacheDir.absolutePath
+                                    env["OPENSSL_CONF"] = "/dev/null"
+                                    env["SSL_CERT_FILE"] = "/system/etc/security/cacerts"
+                                    env["npm_config_prefix"] = File(root, "node").absolutePath
+                                    env["npm_config_cache"] = File(cacheDir, "npm-cache").absolutePath
+                                    env["npm_config_registry"] = "https://registry.npmmirror.com"
+
+                                    val proc = pb.start()
+                                    val reader = proc.inputStream.bufferedReader()
+                                    val fos = FileOutputStream(npmLogFile(), true)
+                                    try {
+                                        var line: String?
+                                        while (reader.readLine().also { line = it } != null) {
+                                            fos.write((line + "\n").toByteArray())
+                                            fos.flush()
+                                        }
+                                    } finally {
+                                        fos.close()
+                                    }
+                                    val exit = proc.waitFor()
+                                    if (exit == 0) {
+                                        safeReply { result.success(true) }
+                                    } else {
+                                        safeReply { result.error("NPM_FAIL", "退出码=$exit", null) }
+                                    }
+                                } catch (e: Throwable) {
+                                    logCrash("npm", e)
+                                    safeReply { result.error("NPM_ERR", e.message ?: "未知", null) }
+                                }
+                            }.start()
+                        }
+                        "getNpmLog" -> {
+                            try {
+                                val f = npmLogFile()
+                                if (!f.exists()) { result.success(""); return@setMethodCallHandler }
+                                val txt = f.readText()
+                                val lines = txt.split("\n")
+                                val tail = if (lines.size > 80) lines.takeLast(80).joinToString("\n") else txt
+                                result.success(tail)
+                            } catch (_: Throwable) {
+                                result.success("")
+                            }
+                        }
                         "clearBackend" -> {
                             try {
                                 val backendDir = File(filesDir, "backend_runtime/backend")
@@ -162,6 +279,7 @@ class MainActivity: FlutterActivity() {
                                 nodeProc?.destroy(); nodeProc = null
                                 File(filesDir, "backend_runtime").deleteRecursively()
                                 crashLogFile().delete()
+                                npmLogFile().delete()
                             } catch (_: Throwable) {}
                             safeReply { result.success(true) }
                         }
