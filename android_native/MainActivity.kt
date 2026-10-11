@@ -343,6 +343,12 @@ class MainActivity: FlutterActivity() {
         env["NODE_ENV"] = "production"
         env["HOME"] = root.absolutePath
         env["TMPDIR"] = cacheDir.absolutePath
+        // ✅ 关键修复：OpenSSL 编译时 OPENSSLDIR 硬编码为 Termux 路径
+        // App 沙箱访问不了 → 设空配置绕过
+        env["OPENSSL_CONF"] = "/dev/null"
+        // 证书路径（部分 node 版本会读）
+        env["SSL_CERT_FILE"] = "/system/etc/security/cacerts"
+        env["SSL_CERT_DIR"] = "/system/etc/security/cacerts"
 
         nodeProc = pb.start()
         val nodeOutput = StringBuilder()
