@@ -292,7 +292,7 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
       final name = (m['name'] ?? '').toString();
       final artist = (m['artist'] ?? '').toString();
       final hash = '${tag}_${name}_$artist';
-      return FadeInItem(index: i, child: RepaintBoundary(child: GlassCard(
+      return RepaintBoundary(child: GlassCard(
         margin: const EdgeInsets.fromLTRB(16, 3, 16, 3),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), radius: 14,
         onTap: () => _playRec(name, artist),
@@ -308,7 +308,7 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
             Text(artist, maxLines: 1, overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.55))),
           ])),
-        ]))));
+        ])));
     }).toList());
   }
 

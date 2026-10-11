@@ -23,12 +23,10 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   bool _done = false;
   bool _success = false;
   int _phase = 0;
-  late final AnimationController _scanCtrl;
 
   @override
   void initState() {
     super.initState();
-    _scanCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
     _logSub = BackendManager.logs.listen(_onLog);
     _progSub = BackendManager.progress.listen((p) {
       if (mounted) setState(() => _progress = p);
@@ -95,7 +93,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     _logSub?.cancel();
     _progSub?.cancel();
     _scroll.dispose();
-    _scanCtrl.dispose();
     super.dispose();
   }
 
@@ -123,22 +120,7 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
       backgroundColor: const Color(0xFF05070A),
       body: Stack(children: [
         Positioned.fill(child: CustomPaint(painter: _GridPainter())),
-        Positioned.fill(child: IgnorePointer(child: AnimatedBuilder(
-          animation: _scanCtrl,
-          builder: (_, __) => Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment(-1, -1 + _scanCtrl.value * 2),
-                end: Alignment(1, -0.8 + _scanCtrl.value * 2),
-                colors: [
-                  Colors.transparent,
-                  const Color(0xFF4ADE80).withOpacity(0.04),
-                  Colors.transparent,
-                ],
-              ),
-            ),
-          ),
-        ))),
+
         _glow(top: -80, right: -60, color: AppTheme.p, size: 300),
         _glow(bottom: -100, left: -80, color: AppTheme.s, size: 260),
         SafeArea(child: Column(children: [
@@ -325,8 +307,7 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
 
   Widget _terminalLine(BuildContext ctx, int i) {
     final line = _lines[i];
-    return _SlideInLine(
-      child: Padding(
+    return Padding(
         padding: const EdgeInsets.symmetric(vertical: 1.5),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(_prefix(line.level), style: TextStyle(fontFamily: 'monospace',
@@ -336,7 +317,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
             style: TextStyle(fontFamily: 'monospace',
               fontSize: 12, height: 1.5, color: _color(line.level)))),
         ]),
-      ),
     );
   }
 
@@ -419,32 +399,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
       onPressed: _start,
       child: const Text('重试', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)));
   }
-}
-
-class _SlideInLine extends StatefulWidget {
-  final Widget child;
-  const _SlideInLine({required this.child});
-  @override
-  State<_SlideInLine> createState() => _SI();
-}
-class _SI extends State<_SlideInLine> with SingleTickerProviderStateMixin {
-  late final AnimationController _c;
-  @override
-  void initState() {
-    super.initState();
-    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 200))..forward();
-  }
-  @override
-  void dispose() { _c.dispose(); super.dispose(); }
-  @override
-  Widget build(BuildContext context) => AnimatedBuilder(
-    animation: _c,
-    builder: (_, child) {
-      final e = Curves.easeOutCubic.transform(_c.value);
-      return Opacity(opacity: e, child: Transform.translate(
-        offset: Offset(-8 * (1 - e), 0), child: child));
-    },
-    child: widget.child);
 }
 
 class _GridPainter extends CustomPainter {
