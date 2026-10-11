@@ -229,7 +229,7 @@ class BackendManager {
       );
 
       final bytes = resp.data ?? const <int>[];
-      final raf = await file.open(mode: FileMode.readWrite);
+      final raf = await file.open(mode: FileMode.writeOnly);
       await raf.setPosition(start);
       await raf.writeFrom(bytes);
       await raf.close();
