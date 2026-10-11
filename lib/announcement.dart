@@ -5,13 +5,30 @@ const int kAnnouncementVersion = 1;
 const String kAnnouncementTitle = 'KuGou 音乐 · 用户服务协议';
 const String kAnnouncementVersionLabel = '版本 v30.0 · 生效 2026-10-10';
 
+/// 秒弹：showGeneralDialog + 优化转场
 Future<bool> showAnnouncement(BuildContext context, {bool force = false}) async {
   final sp = await SharedPreferences.getInstance();
-  if (!force && sp.getInt('announcement_read_v') == kAnnouncementVersion) return true;
+  if (!force && sp.getInt('announcement_read_v') == kAnnouncementVersion) {
+    return true;
+  }
   if (!context.mounted) return true;
-  final r = await showDialog<bool>(
-    context: context, barrierDismissible: false,
-    builder: (_) => const _D());
+
+  final r = await showGeneralDialog<bool>(
+    context: context,
+    barrierDismissible: false,
+    barrierColor: Colors.black.withOpacity(0.65),
+    transitionDuration: const Duration(milliseconds: 180),
+    pageBuilder: (_, __, ___) => const _D(),
+    transitionBuilder: (_, a, __, child) {
+      final curved = CurvedAnimation(parent: a, curve: Curves.easeOutCubic);
+      return FadeTransition(
+        opacity: curved,
+        child: ScaleTransition(
+          scale: Tween(begin: 0.95, end: 1.0).animate(curved),
+          child: child));
+    },
+  );
+
   if (r == true) {
     await sp.setInt('announcement_read_v', kAnnouncementVersion);
     return true;
@@ -30,43 +47,53 @@ class _D extends StatelessWidget {
         borderRadius: BorderRadius.circular(18),
         side: BorderSide(color: Colors.white.withOpacity(0.10))),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 720),
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 700),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
+          // 头部
           Container(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
             decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.08)))),
+              border: Border(
+                bottom: BorderSide(color: Colors.white.withOpacity(0.08)))),
             child: Row(children: [
               Container(width: 38, height: 38,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   gradient: const LinearGradient(
                     colors: [Color(0xFF8B5CF6), Color(0xFFF472B6)])),
-                child: const Icon(Icons.campaign_outlined, color: Colors.white, size: 20)),
+                child: const Icon(Icons.campaign_outlined,
+                  color: Colors.white, size: 20)),
               const SizedBox(width: 12),
               Expanded(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Text(kAnnouncementTitle, style: TextStyle(
-                  fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white)),
+                  fontSize: 15, fontWeight: FontWeight.w800,
+                  color: Colors.white)),
                 const SizedBox(height: 3),
                 Text(kAnnouncementVersionLabel, style: TextStyle(
-                  fontSize: 10.5, color: Colors.white.withOpacity(0.5))),
+                  fontSize: 10.5, color: Colors.white.withOpacity(0.5),
+                  letterSpacing: 0.5)),
               ])),
             ])),
+          // 内容：ListView.builder 分帧渲染
           Flexible(child: ListView.builder(
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
             itemCount: kSections.length,
-            itemBuilder: (_, i) => RepaintBoundary(child: _section(i)))),
+            cacheExtent: 400,
+            itemBuilder: (_, i) => _section(i))),
+          // 底部按钮
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: Colors.white.withOpacity(0.08)))),
+              border: Border(
+                top: BorderSide(color: Colors.white.withOpacity(0.08)))),
             child: Row(children: [
               Expanded(child: OutlinedButton(
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 13),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(11)),
                   side: BorderSide(color: Colors.white.withOpacity(0.20)),
                   foregroundColor: Colors.white.withOpacity(0.8)),
                 onPressed: () => Navigator.pop(context, false),
@@ -75,10 +102,12 @@ class _D extends StatelessWidget {
               Expanded(flex: 2, child: FilledButton(
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 13),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(11)),
                   backgroundColor: const Color(0xFF8B5CF6)),
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('我已阅读并同意'))),
+                child: const Text('我已阅读并同意',
+                  style: TextStyle(fontWeight: FontWeight.w800)))),
             ])),
         ]),
       ));
@@ -90,7 +119,8 @@ class _D extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 18),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(width: 22, height: 22, margin: const EdgeInsets.only(top: 1),
+          Container(width: 22, height: 22,
+            margin: const EdgeInsets.only(top: 1),
             decoration: BoxDecoration(
               color: const Color(0xFF8B5CF6).withOpacity(0.20),
               borderRadius: BorderRadius.circular(6)),
