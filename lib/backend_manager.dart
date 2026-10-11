@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -23,12 +24,15 @@ class BackendManager {
   static const _verKey = 'backend_ver';
   static const _shaKey = 'backend_sha';
 
+  /// 分片下载线程数（GitHub release 支持 Range，6~8 线程性价比最高）
+  static const _threads = 8;
+
   static final _logCtrl = StreamController<TermLine>.broadcast();
   static Stream<TermLine> get logs => _logCtrl.stream;
   static final _progressCtrl = StreamController<double>.broadcast();
   static Stream<double> get progress => _progressCtrl.stream;
 
-  // 并发下载独立进度（修复乱跳）
+  // 并发下载各自独立进度（避免乱跳）
   static double _nodeDlPct = 0;
   static double _backendDlPct = 0;
   static int _lastNodeIntPct = -1;
@@ -39,20 +43,26 @@ class BackendManager {
     _logCtrl.add(TermLine(msg, lv));
   }
 
-  // 只有进度变化超过 1% 才 emit（修复乱跳）
   static void _emit(double v) {
     final clamped = v.clamp(0.0, 1.0);
-    if ((clamped - _lastEmittedPct).abs() < 0.01 && clamped != 0 && clamped != 1) {
+    // 变化小于 0.5% 且非端点值时不推送，避免高频抖动
+    if ((clamped - _lastEmittedPct).abs() < 0.005 &&
+        clamped != 0 && clamped != 1) {
       return;
     }
     _lastEmittedPct = clamped;
     _progressCtrl.add(clamped);
   }
 
+  // 镜像列表：全部支持 Range 透传（GitHub release 直连反代）
   static const _mirrors = [
-    'https://gh-proxy.com',
     'https://ghfast.top',
+    'https://gh-proxy.com',
     'https://ghproxy.net',
+    'https://gh.llkk.cc',
+    'https://github.moeyy.xyz',
+    'https://ghproxy.cc',
+    'https://mirror.ghproxy.com',
     '',
   ];
 
@@ -121,20 +131,23 @@ class BackendManager {
     }
   }
 
-  // ============ 测速 ============
+  // ============ 测速（并发 HEAD，同时验证是否支持 Range） ============
   static Future<String> _fastestMirror() async {
-    log('测速中…');
-    final dio = Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 3),
-      receiveTimeout: const Duration(seconds: 3)));
+    log('测速中…（并发探测 ${_mirrors.length} 个镜像）');
     final testUrl = 'https://github.com/$_owner/$_repo/releases/download/$_tag/node-arm64.tar.gz';
     final results = await Future.wait(_mirrors.map((m) async {
       final url = m.isEmpty ? testUrl : '$m/$testUrl';
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 4),
+        receiveTimeout: const Duration(seconds: 4),
+        followRedirects: true));
       final sw = Stopwatch()..start();
       try {
-        await dio.head(url, options: Options(validateStatus: (_) => true));
+        final r = await dio.head(url,
+          options: Options(validateStatus: (_) => true));
         sw.stop();
-        return MapEntry(m, sw.elapsedMilliseconds);
+        final ok = r.statusCode != null && r.statusCode! < 400;
+        return MapEntry(m, ok ? sw.elapsedMilliseconds : 999999);
       } catch (_) {
         sw.stop();
         return MapEntry(m, 999999);
@@ -146,7 +159,84 @@ class BackendManager {
     return best.key;
   }
 
-  // ============ 下载（独立进度）============
+  // ============ 多线程 Range 分片下载 ============
+  static Future<void> _multiThreadDownload(
+    String url,
+    String destPath,
+    void Function(int received, int total) onProgress, {
+    int threads = _threads,
+  }) async {
+    final file = File(destPath);
+    if (await file.exists()) await file.delete();
+
+    // 1) 探测文件大小 / 是否支持 Range
+    int len = 0;
+    bool acceptRanges = false;
+    try {
+      final probe = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 10),
+        receiveTimeout: const Duration(seconds: 10),
+        followRedirects: true));
+      final head = await probe.head(url,
+        options: Options(validateStatus: (_) => true));
+      len = int.tryParse(head.headers.value('content-length') ?? '0') ?? 0;
+      final ar = (head.headers.value('accept-ranges') ?? '').toLowerCase();
+      acceptRanges = ar.contains('bytes');
+    } catch (_) {}
+
+    // 2) 回退单线程
+    if (len <= 0 || !acceptRanges || threads <= 1) {
+      log('  服务器不支持 Range，回退单线程', LogLevel.warn);
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(minutes: 15),
+        followRedirects: true));
+      await dio.download(url, destPath, onReceiveProgress: onProgress);
+      return;
+    }
+
+    log('  文件大小 ${(len / 1024 / 1024).toStringAsFixed(1)} MB，启用 $threads 线程分片下载');
+
+    // 3) 预分配文件
+    final raf0 = await file.open(mode: FileMode.write);
+    await raf0.setLength(len);
+    await raf0.close();
+
+    final chunkSize = (len / threads).ceil();
+    final received = List<int>.filled(threads, 0);
+
+    await Future.wait(List.generate(threads, (i) async {
+      final start = i * chunkSize;
+      final end = math.min(start + chunkSize, len) - 1;
+      if (start > end || start >= len) return;
+
+      final dio = Dio(BaseOptions(
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(minutes: 15),
+        followRedirects: true));
+
+      final resp = await dio.get<List<int>>(
+        url,
+        options: Options(
+          responseType: ResponseType.bytes,
+          headers: {'Range': 'bytes=$start-$end'},
+          validateStatus: (_) => true),
+        onReceiveProgress: (r, t) {
+          received[i] = r;
+          final sum = received.fold<int>(0, (a, b) => a + b);
+          onProgress(sum, len);
+        },
+      );
+
+      final bytes = resp.data ?? const <int>[];
+      final raf = await file.open(mode: FileMode.write);
+      await raf.setPosition(start);
+      await raf.writeFrom(bytes);
+      await raf.close();
+    }));
+  }
+
+  // ============ 下载单文件（进度独立） ============
   static Future<File> _download(
     String fileName, String destPath, String mirror, String label) async {
     final file = File(destPath);
@@ -158,16 +248,11 @@ class BackendManager {
 
     log('开始下载 $label');
 
-    final dio = Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(minutes: 10)));
-
-    await dio.download(url, destPath, onReceiveProgress: (r, t) {
+    await _multiThreadDownload(url, destPath, (r, t) {
       if (t <= 0) return;
       final pct = r / t;
       final intPct = (pct * 100).toInt();
 
-      // 更新对应文件的进度
       if (label == 'Node') {
         _nodeDlPct = pct;
         if (intPct != _lastNodeIntPct) {
@@ -209,7 +294,7 @@ class BackendManager {
 
       final temp = await getTemporaryDirectory();
 
-      log('【2/3】并发下载 Node + Backend');
+      log('【2/3】并发下载 Node + Backend（每文件 $_threads 线程）');
       final results = await Future.wait([
         _download('node-arm64.tar.gz', '${temp.path}/node-arm64.tar.gz', mirror, 'Node')
             .then((f) => {'ok': true, 'file': f})
@@ -276,7 +361,6 @@ class BackendManager {
       log('═══ 从源头更新 ═══');
       log('');
 
-      // 1. 检查最新 commit
       log('【1/4】检查远端版本');
       final latest = await checkLatestSource();
       if (latest['error'] != null) {
@@ -300,8 +384,7 @@ class BackendManager {
       }
       log('');
 
-      // 2. 下载源码 zip
-      log('【2/4】下载源码');
+      log('【2/4】下载源码（多线程分片）');
       final temp = await getTemporaryDirectory();
       final zipPath = '${temp.path}/kg-source.zip';
       bool dlOk = false;
@@ -311,10 +394,7 @@ class BackendManager {
               ? 'https://github.com/MakcRe/KuGouMusicApi/archive/refs/heads/main.zip'
               : '$m/https://github.com/MakcRe/KuGouMusicApi/archive/refs/heads/main.zip';
           log('尝试: ${m.isEmpty ? "GitHub 直连" : m}');
-          final dio = Dio(BaseOptions(
-            connectTimeout: const Duration(seconds: 15),
-            receiveTimeout: const Duration(minutes: 5)));
-          await dio.download(url, zipPath, onReceiveProgress: (r, t) {
+          await _multiThreadDownload(url, zipPath, (r, t) {
             if (t > 0) {
               final intPct = (r / t * 100).toInt();
               if (intPct % 5 == 0) {
@@ -338,7 +418,6 @@ class BackendManager {
       log('源码下载完成', LogLevel.ok);
       log('');
 
-      // 3. 解压
       log('【3/4】解压源码');
       final extractOk = await _ch.invokeMethod<bool>('extractSourceZip', {
         'zip': zipPath, 'dest': 'backend_runtime/backend',
@@ -352,7 +431,6 @@ class BackendManager {
       _emit(0.60);
       log('');
 
-      // 4. npm install
       log('【4/4】npm install（3-5 分钟）');
       final npmFuture = _ch.invokeMethod<bool>('runNpmInstall');
       int lastNpmLine = 0;
@@ -444,7 +522,7 @@ class BackendManager {
     }
   }
 
-  // ============ 测试 Cookie ============
+  // ============ 测试 Cookie（保留） ============
   static Future<Map<String, dynamic>> testCookie() async {
     final result = <String, dynamic>{'steps': <Map<String, String>>[], 'ok': false};
     void add(String name, String status, {bool pass = true}) {

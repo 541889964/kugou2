@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../backend_manager.dart';
@@ -35,13 +34,11 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   bool _lastOk = false;
   String _currentTask = '';
   DateTime? _taskStart;
+  Timer? _elapsedTimer;
 
   late final AnimationController _scanCtrl;
   late final AnimationController _blinkCtrl;
   late final AnimationController _entryCtrl;
-  late final AnimationController _progressAnimCtrl;
-
-  Animation<double> _progressAnim = const AlwaysStoppedAnimation(0);
 
   @override
   void initState() {
@@ -49,9 +46,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     _scanCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 6))..repeat();
     _blinkCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 1400))..repeat(reverse: true);
     _entryCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 600))..forward();
-    _progressAnimCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 500));
-    _progressAnim = Tween<double>(begin: 0, end: 0).animate(
-      CurvedAnimation(parent: _progressAnimCtrl, curve: Curves.easeOutCubic));
 
     _logSub = BackendManager.logs.listen(_onLog);
     _progSub = BackendManager.progress.listen(_onProgress);
@@ -71,19 +65,16 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
 
   void _onProgress(double p) {
     if (!mounted) return;
-    final old = _progress;
+    // 只存值，进度条渲染由 TweenAnimationBuilder 平滑过渡 → 修复乱跳
     setState(() => _progress = p);
-    // 平滑动画
-    _progressAnim = Tween<double>(begin: old, end: p).animate(
-      CurvedAnimation(parent: _progressAnimCtrl, curve: Curves.easeOutCubic));
-    _progressAnimCtrl.forward(from: 0);
   }
 
   void _onLog(TermLine line) {
     if (!mounted) return;
-    final isProgress = RegExp(r'(Node|Backend)\s+\d+%').hasMatch(line.text);
-    if (isProgress && _lines.isNotEmpty &&
-        RegExp(r'(Node|Backend)\s+\d+%').hasMatch(_lines.last.text)) {
+    final progressRe = RegExp(r'(Node|Backend)\s+\d+%');
+    if (progressRe.hasMatch(line.text) &&
+        _lines.isNotEmpty &&
+        progressRe.hasMatch(_lines.last.text)) {
       setState(() => _lines[_lines.length - 1] = line);
       return;
     }
@@ -93,8 +84,7 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
-        _scroll.animateTo(_scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 180), curve: Curves.easeOut);
+        _scroll.jumpTo(_scroll.position.maxScrollExtent);
       }
     });
   }
@@ -107,7 +97,9 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
       _currentTask = name;
       _taskStart = DateTime.now();
     });
+    _startElapsedTimer();
     final ok = await task();
+    _stopElapsedTimer();
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -115,6 +107,55 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     });
     await _refresh();
     HapticFeedback.mediumImpact();
+  }
+
+  // ============ 新增：测试 Cookie ============
+  Future<void> _testCookie() async {
+    if (_busy) return;
+    setState(() {
+      _busy = true;
+      _lastOk = false;
+      _currentTask = '测试 Cookie';
+      _taskStart = DateTime.now();
+    });
+    _startElapsedTimer();
+    Map<String, dynamic> res = {};
+    try {
+      res = await BackendManager.testCookie();
+    } catch (e) {
+      BackendManager.log('测试失败: $e', LogLevel.err);
+    }
+    _stopElapsedTimer();
+    final steps = res['steps'] as List?;
+    if (steps != null) {
+      for (final s in steps) {
+        final m = s as Map;
+        final pass = m['pass'] == 'true';
+        BackendManager.log('  ${m['name']} → ${m['status']}',
+            pass ? LogLevel.ok : LogLevel.err);
+      }
+    }
+    final ok = res['ok'] == true;
+    BackendManager.log(ok ? '✓ Cookie 正常' : '✗ Cookie 异常',
+        ok ? LogLevel.ok : LogLevel.err);
+    if (!mounted) return;
+    setState(() {
+      _busy = false;
+      _lastOk = ok;
+    });
+    HapticFeedback.mediumImpact();
+  }
+
+  void _startElapsedTimer() {
+    _stopElapsedTimer();
+    _elapsedTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _busy) setState(() {});
+    });
+  }
+
+  void _stopElapsedTimer() {
+    _elapsedTimer?.cancel();
+    _elapsedTimer = null;
   }
 
   Future<void> _clear() async {
@@ -132,11 +173,11 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   void dispose() {
     _logSub?.cancel();
     _progSub?.cancel();
+    _stopElapsedTimer();
     _scroll.dispose();
     _scanCtrl.dispose();
     _blinkCtrl.dispose();
     _entryCtrl.dispose();
-    _progressAnimCtrl.dispose();
     super.dispose();
   }
 
@@ -163,16 +204,13 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     return Scaffold(
       backgroundColor: _C.bg,
       body: Stack(children: [
-        // 1. 背景：静态矩阵
-        Positioned.fill(child: CustomPaint(painter: _MatrixPainter())),
-
-        // 2. 扫描线（缓慢上下）
-        Positioned.fill(child: IgnorePointer(child: AnimatedBuilder(
-          animation: _scanCtrl,
-          builder: (_, __) => CustomPaint(painter: _ScanPainter(_scanCtrl.value)),
-        ))),
-
-        // 3. 内容（带入场动画）
+        Positioned.fill(child: RepaintBoundary(
+          child: CustomPaint(painter: _MatrixPainter()))),
+        Positioned.fill(child: IgnorePointer(child: RepaintBoundary(
+          child: AnimatedBuilder(
+            animation: _scanCtrl,
+            builder: (_, __) => CustomPaint(painter: _ScanPainter(_scanCtrl.value)),
+          )))),
         SafeArea(child: AnimatedBuilder(
           animation: _entryCtrl,
           builder: (_, child) {
@@ -195,7 +233,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     );
   }
 
-  // ============ 顶栏 ============
   Widget _topBar() {
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 8, 10, 6),
@@ -206,19 +243,17 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
         borderRadius: BorderRadius.circular(8),
         boxShadow: [BoxShadow(color: _C.green.withOpacity(0.10), blurRadius: 20, spreadRadius: -4)]),
       child: Row(children: [
-        // 返回按钮
         _tapBtn(
           onTap: () => Navigator.pop(context, _lastOk),
-          child: Icon(Icons.arrow_back_ios_new, size: 13, color: _C.green)),
+          child: const Icon(Icons.arrow_back_ios_new, size: 13, color: _C.green)),
         const SizedBox(width: 12),
         _dot(_C.red), const SizedBox(width: 6),
         _dot(_C.amber), const SizedBox(width: 6),
         _dot(_C.green),
         const SizedBox(width: 14),
-        Expanded(child: Text('root@kugou:~/backend#',
+        const Expanded(child: Text('root@kugou:~/backend#',
           style: TextStyle(fontFamily: 'monospace', fontSize: 12,
             color: _C.green, fontWeight: FontWeight.w700, letterSpacing: 0.4))),
-        // 闪烁状态灯
         AnimatedBuilder(animation: _blinkCtrl, builder: (_, __) {
           final on = _busy || _running;
           final color = _running ? _C.green
@@ -251,7 +286,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
         child: child));
   }
 
-  // ============ 动作面板 ============
   Widget _actionPanel() {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
@@ -285,12 +319,12 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
       Row(children: [
         _iconBadge(Icons.download, _C.cyan),
         const SizedBox(width: 10),
-        Text('首次使用：下载运行环境', style: TextStyle(
+        const Text('首次使用：下载运行环境', style: TextStyle(
           fontFamily: 'monospace', fontSize: 12.5, color: _C.cyan,
           fontWeight: FontWeight.w800, letterSpacing: 0.4)),
       ]),
       const SizedBox(height: 12),
-      Text('· Node 运行时 (约 62MB)\n· KuGouMusicApi (约 3MB)',
+      const Text('· Node 运行时 (约 62MB)\n· KuGouMusicApi (约 3MB)',
         style: TextStyle(fontFamily: 'monospace', fontSize: 10.5,
           color: _C.greenDim, height: 1.7)),
       const SizedBox(height: 16),
@@ -313,7 +347,7 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
       Row(children: [
         _iconBadge(Icons.check_circle, _C.green),
         const SizedBox(width: 10),
-        Text('运行环境已就绪', style: TextStyle(
+        const Text('运行环境已就绪', style: TextStyle(
           fontFamily: 'monospace', fontSize: 12.5, color: _C.green,
           fontWeight: FontWeight.w800, letterSpacing: 0.4)),
         const Spacer(),
@@ -340,6 +374,14 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
           enabled: !_busy,
           onTap: () => _run(BackendManager.executeOnly, '执行'))),
       ]),
+      const SizedBox(height: 10),
+      SizedBox(width: double.infinity, child: _bigBtn(
+        label: _busy && _currentTask == '测试 Cookie' ? '测试中…' : '测试 Cookie',
+        subtitle: '检查 token / 账号 / 搜索 / 免费歌接口',
+        icon: Icons.verified_user,
+        color: _C.cyan,
+        enabled: !_busy,
+        onTap: _testCookie)),
       if (_busy) ...[
         const SizedBox(height: 16),
         _progressIndicator(),
@@ -390,9 +432,9 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
         border: Border.all(color: _C.green.withOpacity(0.3)),
         borderRadius: BorderRadius.circular(6)),
       child: Row(children: [
-        Icon(Icons.check_circle_outline, size: 14, color: _C.green),
+        const Icon(Icons.check_circle_outline, size: 14, color: _C.green),
         const SizedBox(width: 8),
-        Text('$task 成功', style: TextStyle(
+        Text('$task 成功', style: const TextStyle(
           fontFamily: 'monospace', fontSize: 11, color: _C.green,
           fontWeight: FontWeight.w700)),
       ]));
@@ -448,34 +490,37 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   }
 
   Widget _progressIndicator() {
+    final clamped = _progress.clamp(0.0, 1.0);
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        Text('${(_progress * 100).toStringAsFixed(0)}%', style: TextStyle(
+        Text('${(clamped * 100).toStringAsFixed(0)}%', style: const TextStyle(
           fontFamily: 'monospace', fontSize: 11, color: _C.green,
           fontWeight: FontWeight.w800)),
         const Spacer(),
         if (_taskStart != null)
-          Text(_elapsed(), style: TextStyle(
+          Text(_elapsed(), style: const TextStyle(
             fontFamily: 'monospace', fontSize: 10, color: _C.greenDim)),
       ]),
       const SizedBox(height: 8),
-      AnimatedBuilder(
-        animation: _progressAnimCtrl,
-        builder: (_, __) => ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: Stack(children: [
-            Container(height: 5, color: _C.green.withOpacity(0.10)),
-            FractionallySizedBox(
-              widthFactor: _progressAnim.value.clamp(0.0, 1.0),
+      ClipRRect(
+        borderRadius: BorderRadius.circular(3),
+        child: Stack(children: [
+          Container(height: 5, color: _C.green.withOpacity(0.10)),
+          TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 0, end: clamped),
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOutCubic,
+            builder: (_, value, __) => FractionallySizedBox(
+              widthFactor: value.clamp(0.0, 1.0),
               child: Container(
                 height: 5,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(colors: [
+                  gradient: const LinearGradient(colors: [
                     _C.greenDim, _C.green, _C.cyan, _C.green]),
                   boxShadow: [BoxShadow(color: _C.green.withOpacity(0.8),
                     blurRadius: 10, spreadRadius: 1)])),
-            ),
-          ]))),
+            )),
+        ])),
     ]);
   }
 
@@ -485,7 +530,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     return '${s}s';
   }
 
-  // ============ 控制台 ============
   Widget _console() {
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 4, 10, 6),
@@ -498,7 +542,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Stack(children: [
-          // 标题栏
           Positioned(top: 0, left: 0, right: 0,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
@@ -514,11 +557,10 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
                   color: _C.green.withOpacity(0.9),
                   letterSpacing: 1.5, fontWeight: FontWeight.w800)),
                 const Spacer(),
-                Text('${_lines.length}', style: TextStyle(
+                Text('${_lines.length}', style: const TextStyle(
                   fontFamily: 'monospace', fontSize: 9,
                   color: _C.greenDim, fontWeight: FontWeight.w700)),
               ]))),
-          // 内容
           Positioned.fill(top: 30,
             child: _lines.isEmpty ? _emptyConsole() : _consoleList()),
         ])),
@@ -536,7 +578,7 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
         child: Icon(Icons.memory, size: 28,
           color: _C.greenDim.withOpacity(0.4))),
       const SizedBox(height: 14),
-      Text('等待操作…', style: TextStyle(
+      const Text('等待操作…', style: TextStyle(
         fontFamily: 'monospace', fontSize: 12,
         color: _C.greenDim, letterSpacing: 1)),
       const SizedBox(height: 8),
@@ -557,13 +599,12 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   Widget _logLine(BuildContext ctx, int i) {
     final line = _lines[i];
     final color = _color(line.level);
-    return _LogLineIn(
-      key: ValueKey('line_$i'),
+    return RepaintBoundary(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 1),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(
-            width: 12, alignment: Alignment.center,
+          SizedBox(
+            width: 12,
             child: Text(_prefix(line.level), style: TextStyle(
               fontFamily: 'monospace', fontSize: 11,
               color: color, fontWeight: FontWeight.w800))),
@@ -575,7 +616,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     );
   }
 
-  // ============ 底栏 ============
   Widget _bottomBar() {
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 4, 10, 8),
@@ -618,9 +658,9 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
             decoration: BoxDecoration(
               border: Border.all(color: _C.greenDim.withOpacity(0.4)),
               borderRadius: BorderRadius.circular(5)),
-            child: Row(children: [
+            child: const Row(children: [
               Icon(Icons.cleaning_services_outlined, size: 12, color: _C.greenDim),
-              const SizedBox(width: 5),
+              SizedBox(width: 5),
               Text('清除', style: TextStyle(
                 fontFamily: 'monospace', fontSize: 10,
                 color: _C.greenDim, fontWeight: FontWeight.w700)),
@@ -629,7 +669,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   }
 }
 
-// ============ 点击缩放按钮 ============
 class _AnimatedPressBtn extends StatefulWidget {
   final Widget child;
   final VoidCallback onTap;
@@ -666,40 +705,6 @@ class _APBS extends State<_AnimatedPressBtn> {
   }
 }
 
-// ============ 日志行入场动画 ============
-class _LogLineIn extends StatefulWidget {
-  final Widget child;
-  const _LogLineIn({super.key, required this.child});
-  @override
-  State<_LogLineIn> createState() => _LLIS();
-}
-
-class _LLIS extends State<_LogLineIn> with SingleTickerProviderStateMixin {
-  late final AnimationController _c;
-  @override
-  void initState() {
-    super.initState();
-    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 260))..forward();
-  }
-  @override
-  void dispose() { _c.dispose(); super.dispose(); }
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _c,
-      builder: (_, child) {
-        final t = Curves.easeOutCubic.transform(_c.value);
-        return Opacity(
-          opacity: t,
-          child: Transform.translate(
-            offset: Offset(-8 * (1 - t), 0),
-            child: child));
-      },
-      child: widget.child);
-  }
-}
-
-// ============ 背景：静态矩阵 ============
 class _MatrixPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -722,23 +727,28 @@ class _MatrixPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter old) => false;
 }
 
-// ============ 背景：缓慢扫描 ============
 class _ScanPainter extends CustomPainter {
   final double t;
   _ScanPainter(this.t);
+
+  static final Paint _paint = Paint();
+  static final List<Color> _colors = [
+    _C.green.withOpacity(0.0),
+    _C.green.withOpacity(0.05),
+    _C.green.withOpacity(0.0),
+  ];
+
   @override
   void paint(Canvas canvas, Size size) {
     final y = size.height * t;
-    final p = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter, end: Alignment.bottomCenter,
-        colors: [
-          _C.green.withOpacity(0.0),
-          _C.green.withOpacity(0.05),
-          _C.green.withOpacity(0.0),
-        ]).createShader(Rect.fromLTWH(0, y - 60, size.width, 120));
-    canvas.drawRect(Rect.fromLTWH(0, y - 60, size.width, 120), p);
+    final rect = Rect.fromLTWH(0, y - 60, size.width, 120);
+    _paint.shader = LinearGradient(
+      begin: Alignment.topCenter, end: Alignment.bottomCenter,
+      colors: _colors,
+    ).createShader(rect);
+    canvas.drawRect(rect, _paint);
   }
+
   @override
   bool shouldRepaint(covariant _ScanPainter old) => old.t != t;
 }
