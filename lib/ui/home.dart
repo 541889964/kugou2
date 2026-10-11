@@ -37,16 +37,12 @@ class _R extends State<RootPage> {
   void initState() {
     super.initState();
     _pc = PageController(initialPage: 0);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _boot());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _showAd());
   }
 
-  Future<void> _boot() async {
+  Future<void> _showAd() async {
     if (!mounted) return;
-    for (final p in IconPicker.all) {
-      try { if (!mounted) break; await precacheImage(AssetImage(p), context); } catch (_) {}
-    }
-    if (!mounted) return;
-    await Future.delayed(const Duration(milliseconds: 100));
+    await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
     final agreed = await showAnnouncement(context);
     if (!agreed) {
@@ -87,7 +83,9 @@ class _R extends State<RootPage> {
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 0, 10, 8),
       child: GlassCard(
-        radius: 24, padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4), heavy: true,
+        radius: 24,
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        heavy: true,
         child: Row(children: List.generate(items.length, (i) {
           final active = i == _t;
           final it = items[i];
@@ -96,7 +94,9 @@ class _R extends State<RootPage> {
               onTap: () {
                 if (i == _t) return;
                 setState(() => _t = i);
-                _pc.animateToPage(i, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+                _pc.animateToPage(i,
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic);
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 220),
@@ -105,8 +105,10 @@ class _R extends State<RootPage> {
                 decoration: BoxDecoration(
                   gradient: active ? AppTheme.grad : null,
                   borderRadius: BorderRadius.circular(18),
-                  boxShadow: active ? [BoxShadow(color: AppTheme.p.withOpacity(0.5),
-                    blurRadius: 14, spreadRadius: -4, offset: const Offset(0, 4))] : null),
+                  boxShadow: active ? [BoxShadow(
+                    color: AppTheme.p.withOpacity(0.5),
+                    blurRadius: 14, spreadRadius: -4,
+                    offset: const Offset(0, 4))] : null),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
                   Icon(active ? it.$2 : it.$1, size: 21,
                     color: active ? Colors.white : Colors.white.withOpacity(0.55)),
@@ -129,31 +131,32 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
-  bool _homeLoading = true;
-  List<Map<String, dynamic>> _recommend = [];
+  bool _loading = true;
+  List<Map<String, dynamic>> _rec = [];
 
   @override
-  void initState() { super.initState(); _loadHome(); }
+  void initState() { super.initState(); _load(); }
 
-  Future<void> _loadHome() async {
-    setState(() => _homeLoading = true);
-    final r = await NetMusic.dailyRecommend();
-    if (!mounted) return;
-    setState(() {
-      _recommend = r.take(20).toList();
-      _homeLoading = false;
-    });
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final r = await NetMusic.dailyRecommend();
+      if (mounted) setState(() {
+        _rec = r.take(20).toList();
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final sm = context.watch<SourceManager>();
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SafeArea(bottom: false, child: Column(children: [
-        // 顶部问候 + 来源
-        Padding(padding: const EdgeInsets.fromLTRB(20, 14, 12, 8),
+        Padding(padding: const EdgeInsets.fromLTRB(20, 16, 12, 8),
           child: Row(children: [
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(_greeting(), style: TextStyle(fontSize: 13,
@@ -162,22 +165,13 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
               const Text('发现音乐', style: TextStyle(fontSize: 26,
                 fontWeight: FontWeight.w900, letterSpacing: -0.5, height: 1.1)),
             ])),
-            GestureDetector(
-              onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const SettingsPage())),
-              child: GlassCard(radius: 20, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), heavy: true,
-                child: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(sm.search == MusicSource.concept ? Icons.diamond : Icons.cloud,
-                    size: 12, color: sm.search == MusicSource.concept ? AppTheme.p : AppTheme.accent),
-                  const SizedBox(width: 5),
-                  Text(sm.searchLabel, style: TextStyle(fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    color: sm.search == MusicSource.concept ? AppTheme.p : AppTheme.accent)),
-                ]))),
+            IconButton(
+              icon: const Icon(Icons.settings_outlined, size: 22),
+              splashRadius: 20,
+              onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const SettingsPage()))),
           ])),
-
-        // 搜索栏
-        Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+        Padding(padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: GlassCard(radius: 22, padding: EdgeInsets.zero, heavy: true,
             child: GestureDetector(
               onTap: () => Navigator.push(context,
@@ -192,29 +186,21 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
                   GestureDetector(
                     onTap: () => Navigator.push(context,
                       MaterialPageRoute(builder: (_) => const RecognizePage())),
-                    child: Icon(Icons.mic_none, size: 20, color: Colors.white.withOpacity(0.7)),
-                  ),
+                    child: Icon(Icons.mic_none, size: 20,
+                      color: Colors.white.withOpacity(0.7))),
                 ]))))),
-
-        // 4 宫格快捷入口
         Padding(padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(children: [
-            _quick(Icons.auto_awesome, '每日推荐', AppTheme.p, AppTheme.accent, () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoverPage()));
-            }),
-            _quick(Icons.graphic_eq, '听歌识曲', AppTheme.s, const Color(0xFF0EA5E9), () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const RecognizePage()));
-            }),
-            _quick(Icons.favorite, '我的收藏', AppTheme.accent, const Color(0xFFF97316), () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const PlaylistPage()));
-            }),
-            _quick(Icons.folder_special, '本地音乐', const Color(0xFF10B981), AppTheme.s, () {
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const LocalMusicPage()));
-            }),
+            _quick(Icons.auto_awesome, '每日推荐', AppTheme.p, AppTheme.accent,
+              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DiscoverPage()))),
+            _quick(Icons.graphic_eq, '听歌识曲', AppTheme.s, const Color(0xFF0EA5E9),
+              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RecognizePage()))),
+            _quick(Icons.favorite, '我的收藏', AppTheme.accent, const Color(0xFFF97316),
+              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PlaylistPage()))),
+            _quick(Icons.folder_special, '本地音乐', const Color(0xFF10B981), AppTheme.s,
+              () => Navigator.push(context, MaterialPageRoute(builder: (_) => const LocalMusicPage()))),
           ])),
-        const SizedBox(height: 18),
-
-        // 为你推荐
+        const SizedBox(height: 20),
         Padding(padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
           child: Row(children: [
             Container(width: 3, height: 16, decoration: BoxDecoration(
@@ -224,14 +210,13 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
               fontWeight: FontWeight.w800, letterSpacing: -0.2)),
             const Spacer(),
             GestureDetector(
-              onTap: _loadHome,
+              onTap: _load,
               child: Text('换一批', style: TextStyle(fontSize: 11.5,
                 color: AppTheme.p, fontWeight: FontWeight.w700))),
           ])),
-
-        Expanded(child: _homeLoading
+        Expanded(child: _loading
           ? const Center(child: CircularProgressIndicator())
-          : _recommendList()),
+          : _list()),
       ])),
     );
   }
@@ -244,27 +229,27 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
     return '晚上好';
   }
 
-  Widget _quick(IconData icon, String label, Color c1, Color c2, VoidCallback onTap) {
+  Widget _quick(IconData i, String label, Color c1, Color c2, VoidCallback onTap) {
     return Expanded(child: InkWell(borderRadius: BorderRadius.circular(16),
       onTap: onTap,
       child: Padding(padding: const EdgeInsets.symmetric(vertical: 6),
         child: Column(children: [
-          IconTile(icon: icon, c1: c1, c2: c2, size: 52),
+          IconTile(icon: i, c1: c1, c2: c2, size: 52),
           const SizedBox(height: 8),
           Text(label, style: const TextStyle(fontSize: 11,
             fontWeight: FontWeight.w600, color: Colors.white)),
         ]))));
   }
 
-  Widget _recommendList() {
-    if (_recommend.isEmpty) return Center(child: Text('暂无推荐',
+  Widget _list() {
+    if (_rec.isEmpty) return Center(child: Text('暂无推荐',
       style: TextStyle(color: Colors.white.withOpacity(0.5))));
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 24),
-      itemCount: _recommend.length,
+      itemCount: _rec.length,
       itemExtent: 66,
       cacheExtent: 400,
-      itemBuilder: (_, i) => RepaintBoundary(child: _row(_recommend[i], i)));
+      itemBuilder: (_, i) => RepaintBoundary(child: _row(_rec[i], i)));
   }
 
   Widget _row(Map<String, dynamic> m, int i) {
@@ -293,13 +278,15 @@ class _HPState extends State<HomePage> with AutomaticKeepAliveClientMixin {
           Text(artist, maxLines: 1, overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.55))),
         ])),
-        Icon(Icons.play_circle_outline, size: 22, color: Colors.white.withOpacity(0.5)),
+        Icon(Icons.play_circle_outline, size: 22,
+          color: Colors.white.withOpacity(0.5)),
       ]));
   }
 
   Widget _cover(String hash) {
     final p = IconPicker.forHash(hash);
-    if (p.isEmpty) return Container(decoration: const BoxDecoration(gradient: AppTheme.discGrad),
+    if (p.isEmpty) return Container(decoration: const BoxDecoration(
+      gradient: AppTheme.discGrad),
       child: const Icon(Icons.music_note, color: Colors.white70, size: 20));
     return Image.asset(p, fit: BoxFit.cover, filterQuality: FilterQuality.low,
       errorBuilder: (_, __, ___) => Container(
@@ -338,21 +325,21 @@ class _Mini extends StatelessWidget {
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           SizedBox(height: 58, child: Row(children: [
             const SizedBox(width: 10),
-            GestureDetector(onTap: open, child: SizedBox(width: 42, height: 42,
+            SizedBox(width: 42, height: 42,
               child: ClipRRect(borderRadius: BorderRadius.circular(11),
-                child: _icon(s.hash)))),
+                child: _icon(s.hash))),
             const SizedBox(width: 12),
-            Expanded(child: GestureDetector(behavior: HitTestBehavior.opaque, onTap: open,
-              child: Column(mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                Text(s.singer, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 10.5, color: Colors.white.withOpacity(0.55))),
-              ]))),
+            Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(s.name, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+              Text(s.singer, maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 10.5, color: Colors.white.withOpacity(0.55))),
+            ])),
             if (p.loading)
               const Padding(padding: EdgeInsets.all(12),
-                child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                child: SizedBox(width: 16, height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2)))
             else IconButton(onPressed: p.toggle, iconSize: 28, splashRadius: 22,
               icon: Icon(p.playing ? Icons.pause_circle_filled : Icons.play_circle_filled,
                 color: Colors.white)),
