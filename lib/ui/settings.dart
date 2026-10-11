@@ -12,6 +12,7 @@ import '../updater.dart';
 import '../wallpaper_manager.dart';
 import 'server_page.dart';
 import 'terminal_page.dart';
+import 'har_terminal_page.dart';
 import 'wallpaper_page.dart';
 import 'theme.dart';
 import 'glass.dart';
@@ -57,15 +58,13 @@ class _SP extends State<SettingsPage> {
         setState(() => _importing = false);
         return;
       }
-      final m = HarParser.parse(await File(r.files.single.path!).readAsString());
-      if (m.isEmpty || !HarParser.isValid(m)) {
-        setState(() => _importing = false);
-        _toast(m.isEmpty ? '未找到 Cookie 字段' : '字段不完整');
-        return;
-      }
-      await SignatureManager.I.updateUser(m);
+      final path = r.files.single.path!;
       setState(() => _importing = false);
-      _toast('✓ 导入成功');
+      if (!mounted) return;
+      final ok = await Navigator.push<bool>(context,
+        MaterialPageRoute(builder: (_) => HarTerminalPage(harFile: File(path))));
+      if (!mounted) return;
+      if (ok == true) _toast('凭证已更新');
     } catch (e) {
       setState(() => _importing = false);
       _toast('失败: $e');
