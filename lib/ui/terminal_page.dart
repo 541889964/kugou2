@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../backend_manager.dart';
 
-// ============ 黑客主题色 ============
 class _H {
   static const green = Color(0xFF00FF41);
   static const greenDim = Color(0xFF00A828);
@@ -42,12 +41,9 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-    _scanCtrl = AnimationController(vsync: this,
-      duration: const Duration(seconds: 4))..repeat();
-    _blinkCtrl = AnimationController(vsync: this,
-      duration: const Duration(milliseconds: 800))..repeat(reverse: true);
-    _clockCtrl = AnimationController(vsync: this,
-      duration: const Duration(seconds: 1))..repeat();
+    _scanCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
+    _blinkCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat(reverse: true);
+    _clockCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 1))..repeat();
 
     _logSub = BackendManager.logs.listen(_onLog);
     _progSub = BackendManager.progress.listen((p) {
@@ -61,7 +57,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   void _onLog(TermLine line) {
     if (!mounted) return;
 
-    // 进度行：直接替换上一条
     final isProgress = RegExp(r'(Node|Backend)\s+\d+%').hasMatch(line.text);
     if (isProgress && _lines.isNotEmpty &&
         RegExp(r'(Node|Backend)\s+\d+%').hasMatch(_lines.last.text)) {
@@ -90,7 +85,7 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
         _scroll.animateTo(_scroll.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 160), curve: Curves.easeOut);
+            duration: const Duration(milliseconds: 160), curve: Curves.easeOut);
       }
     });
   }
@@ -125,10 +120,13 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: BorderSide(color: _H.red.withOpacity(0.5))),
-      child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 500, maxHeight: 500),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500, maxHeight: 500),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(border: Border(bottom: BorderSide(color: _H.red.withOpacity(0.3)))),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: _H.red.withOpacity(0.3)))),
             child: Row(children: [
               Icon(Icons.warning_amber_rounded, color: _H.red, size: 18),
               const SizedBox(width: 8),
@@ -138,12 +136,15 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
             ])),
           Flexible(child: SingleChildScrollView(
             padding: const EdgeInsets.all(12),
-            child: SelectableText(log.isEmpty ? '> (no data)' : log,
-              style: TextStyle(fontFamily: 'monospace', fontSize: 10,
+            child: SelectableText(
+              log.isEmpty ? '> (no data)' : log,
+              style: TextStyle(
+                fontFamily: 'monospace', fontSize: 10,
                 color: _H.greenDim, height: 1.5)))),
           Padding(padding: const EdgeInsets.all(8),
             child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
-              TextButton(onPressed: () => Navigator.pop(context),
+              TextButton(
+                onPressed: () => Navigator.pop(context),
                 child: Text('CLOSE', style: TextStyle(
                   fontFamily: 'monospace', fontSize: 11, color: _H.green))),
             ])),
@@ -199,7 +200,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     );
   }
 
-  // ---------- 顶部系统栏 ----------
   Widget _topBar() {
     return Container(
       margin: const EdgeInsets.fromLTRB(8, 8, 8, 4),
@@ -215,15 +215,15 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
           splashRadius: 16,
           onPressed: () => Navigator.pop(context, _success)),
         const SizedBox(width: 4),
-        _blinkDot(_H.red), const SizedBox(width: 5),
-        _blinkDot(_H.amber), const SizedBox(width: 5),
+        _blinkDot(_H.red),
+        const SizedBox(width: 5),
+        _blinkDot(_H.amber),
+        const SizedBox(width: 5),
         _blinkDot(_H.green),
         const SizedBox(width: 12),
         Expanded(child: Text('root@kugou:~/backend#',
           style: TextStyle(fontFamily: 'monospace', fontSize: 12,
-            color: _H.green, fontWeight: FontWeight.w700,
-            letterSpacing: 0.3))),
-        // 实时时钟
+            color: _H.green, fontWeight: FontWeight.w700, letterSpacing: 0.3))),
         AnimatedBuilder(animation: _clockCtrl, builder: (_, __) {
           final now = DateTime.now();
           final hh = now.hour.toString().padLeft(2, '0');
@@ -233,7 +233,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
             fontFamily: 'monospace', fontSize: 11, color: _H.cyan));
         }),
         const SizedBox(width: 8),
-        // 状态灯
         AnimatedBuilder(animation: _blinkCtrl, builder: (_, __) {
           final on = _running;
           final color = on ? _H.green : (_done ? (_success ? _H.green : _H.red) : _H.greenDim);
@@ -249,7 +248,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   Widget _blinkDot(Color c) => Container(width: 10, height: 10,
     decoration: BoxDecoration(shape: BoxShape.circle, color: c));
 
-  // ---------- 阶段指示器（六边形电路） ----------
   Widget _phaseStrip() {
     const phases = ['SCAN', 'DL', 'UNZIP', 'EXEC', 'DONE'];
     return Container(
@@ -297,20 +295,19 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
                   gradient: LinearGradient(colors: [
                     (passed ? _H.green : _H.greenDim).withOpacity(0.5),
                     (passed ? _H.green : _H.greenDim).withOpacity(0.2),
-                  ]))),
+                  ])))),
           ]));
         }))),
         const SizedBox(height: 12),
-        // 进度条（发光扫描）
-        ClipRRect(borderRadius: BorderRadius.circular(2),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(2),
           child: SizedBox(height: 6, child: Stack(children: [
             Container(color: _H.green.withOpacity(0.08)),
             AnimatedContainer(
               duration: const Duration(milliseconds: 300),
               width: MediaQuery.of(context).size.width * _progress * 0.92,
               decoration: BoxDecoration(
-                gradient: LinearGradient(colors: [
-                  _H.greenDim, _H.green, _H.cyan]),
+                gradient: LinearGradient(colors: [_H.greenDim, _H.green, _H.cyan]),
                 boxShadow: [BoxShadow(color: _H.green.withOpacity(0.7),
                   blurRadius: 8, spreadRadius: 1)])),
             if (_running)
@@ -323,8 +320,7 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
                       gradient: LinearGradient(colors: [
                         Colors.transparent,
                         Colors.white.withOpacity(0.7),
-                        Colors.transparent])))),
-              )),
+                        Colors.transparent])))))),
           ]))),
         const SizedBox(height: 4),
         Row(children: [
@@ -346,7 +342,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     return '[IDLE]';
   }
 
-  // ---------- 控制台 ----------
   Widget _console() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -359,7 +354,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
           child: Stack(children: [
-            // 顶部装饰：标签栏
             Positioned(top: 0, left: 0, right: 0,
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -376,7 +370,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
                   Text('${_lines.length} lines', style: TextStyle(
                     fontFamily: 'monospace', fontSize: 9, color: _H.greenDim)),
                 ]))),
-            // 日志区
             Positioned.fill(top: 22,
               child: _lines.isEmpty
                 ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -394,8 +387,8 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
                     padding: const EdgeInsets.fromLTRB(10, 6, 10, 10),
                     itemCount: _lines.length,
                     itemBuilder: _logLine)),
-          ]),
-        )),
+          ])),
+      ),
     );
   }
 
@@ -424,7 +417,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     );
   }
 
-  // ---------- 底部操作栏 ----------
   Widget _bottomBar() {
     return Container(
       margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
@@ -439,20 +431,25 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
           final c = _running ? _H.amber
             : (_success ? _H.green : (_done ? _H.red : _H.greenDim));
           return Row(children: [
-            Container(width: 8, height: 8, decoration: BoxDecoration(
-              shape: BoxShape.circle, color: c.withOpacity(0.6 + _blinkCtrl.value * 0.4),
-              boxShadow: [BoxShadow(color: c, blurRadius: _running ? 8 : 3)])),
+            Container(width: 8, height: 8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: c.withOpacity(0.6 + _blinkCtrl.value * 0.4),
+                boxShadow: [BoxShadow(color: c, blurRadius: _running ? 8 : 3)])),
             const SizedBox(width: 8),
-            Text(_running ? '> PROCESSING' : (_done ? (_success ? '> OK' : '> ERR') : '> STANDBY'),
+            Text(_running ? '> PROCESSING'
+              : (_done ? (_success ? '> OK' : '> ERR') : '> STANDBY'),
               style: TextStyle(fontFamily: 'monospace', fontSize: 11,
                 color: c, fontWeight: FontWeight.w700, letterSpacing: 0.8)),
           ]);
         }),
         const Spacer(),
         if (_done && !_success)
-          TextButton(onPressed: _showCrashLog,
+          TextButton(
+            onPressed: _showCrashLog,
             style: TextButton.styleFrom(
-              foregroundColor: _H.amber, padding: const EdgeInsets.symmetric(horizontal: 8)),
+              foregroundColor: _H.amber,
+              padding: const EdgeInsets.symmetric(horizontal: 8)),
             child: Text('>> LOG', style: TextStyle(
               fontFamily: 'monospace', fontSize: 11, fontWeight: FontWeight.w700))),
         if (_done && _success)
@@ -483,13 +480,12 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   }
 }
 
-// ============ 背景：矩阵代码流 ============
 class _MatrixPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final tp = TextPainter(textDirection: TextDirection.ltr);
     final r = math.Random(42);
-    const chars = '01アイウエオカキクケコサシスセソタチツテトABCDEF!@#\$%';
+    const chars = '01アイウエオカキクケコサシスセソタチツテトABCDEF!@#';
     for (double x = 0; x < size.width; x += 18) {
       final col = (r.nextInt(10) + 3);
       for (int y = 0; y < col; y++) {
@@ -506,7 +502,6 @@ class _MatrixPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter old) => false;
 }
 
-// ============ 扫描线 ============
 class _ScanLinePainter extends CustomPainter {
   final double t;
   _ScanLinePainter(this.t);
