@@ -332,7 +332,8 @@ class MainActivity: FlutterActivity() {
 
         nodeProc?.destroy(); nodeProc = null
 
-        val pb = ProcessBuilder(node.absolutePath, app.absolutePath)
+        // ✅ 加 --jitless 避免 SELinux W^X 限制
+        val pb = ProcessBuilder(node.absolutePath, "--jitless", app.absolutePath)
         pb.directory(File(root, "backend"))
         pb.redirectErrorStream(true)
         val env = pb.environment()
@@ -344,19 +345,33 @@ class MainActivity: FlutterActivity() {
         env["TMPDIR"] = cacheDir.absolutePath
 
         nodeProc = pb.start()
+        val nodeOutput = StringBuilder()
         Thread {
             try {
                 val r = nodeProc?.inputStream?.bufferedReader() ?: return@Thread
                 while (true) {
                     val line = r.readLine() ?: break
                     android.util.Log.i("KuGou-Node", line)
+                    synchronized(nodeOutput) {
+                        nodeOutput.append(line).append("\n")
+                        if (nodeOutput.length > 4000) {
+                            nodeOutput.delete(0, nodeOutput.length - 4000)
+                        }
+                    }
                 }
             } catch (_: Throwable) {}
         }.start()
 
-        Thread.sleep(1000)
+        Thread.sleep(2000)
         if (nodeProc?.isAlive != true) {
-            throw Exception("node 进程立即退出 (code=${nodeProc?.exitValue()})")
+            val code = nodeProc?.exitValue()
+            val out = synchronized(nodeOutput) { nodeOutput.toString() }
+            val msg = "node 进程立即退出 (code=$code)\n" +
+                      "可能原因: SELinux W^X 或缺少依赖\n" +
+                      "--- node 输出 ---\n" +
+                      (if (out.isEmpty()) "(无输出)" else out)
+            logCrash("startNode-exit", Exception(msg))
+            throw Exception(msg)
         }
         return true
     }
