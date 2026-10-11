@@ -19,7 +19,6 @@ class MainActivity: FlutterActivity() {
     private var outputPath: String? = null
     private var nodeProc: Process? = null
 
-    // ✅ 修复：延迟获取，避免在构造函数里调 cacheDir 导致 NPE
     private fun crashLogFile(): File = File(cacheDir, "backend_crash.log")
 
     private fun logCrash(tag: String, e: Throwable) {
@@ -31,10 +30,19 @@ class MainActivity: FlutterActivity() {
         } catch (_: Throwable) {}
     }
 
+    private fun readFully(input: InputStream, buf: ByteArray, len: Int): Int {
+        var total = 0
+        while (total < len) {
+            val n = input.read(buf, total, len - total)
+            if (n <= 0) break
+            total += n
+        }
+        return total
+    }
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        // ---------- 录音通道 ----------
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, REC_CHANNEL)
             .setMethodCallHandler { call, result ->
                 try {
@@ -78,7 +86,6 @@ class MainActivity: FlutterActivity() {
                 }
             }
 
-        // ---------- 后端通道 ----------
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BACKEND_CHANNEL)
             .setMethodCallHandler { call, result ->
                 val replied = AtomicBoolean(false)
@@ -140,6 +147,16 @@ class MainActivity: FlutterActivity() {
                             safeReply { result.success(true) }
                         }
                         "running" -> safeReply { result.success(nodeProc?.isAlive == true) }
+                        "clearBackend" -> {
+                            try {
+                                val backendDir = File(filesDir, "backend_runtime/backend")
+                                if (backendDir.exists()) backendDir.deleteRecursively()
+                                safeReply { result.success(true) }
+                            } catch (e: Throwable) {
+                                logCrash("clearBackend", e)
+                                safeReply { result.success(false) }
+                            }
+                        }
                         "clear" -> {
                             try {
                                 nodeProc?.destroy(); nodeProc = null
@@ -147,15 +164,6 @@ class MainActivity: FlutterActivity() {
                                 crashLogFile().delete()
                             } catch (_: Throwable) {}
                             safeReply { result.success(true) }
-                        }
-                        "listDir" -> {
-                            try {
-                                val root = File(filesDir, "backend_runtime")
-                                val txt = listTree(root, 4)
-                                safeReply { result.success(txt) }
-                            } catch (e: Throwable) {
-                                safeReply { result.success("listDir 失败: ${e.message}") }
-                            }
                         }
                         "crashLog" -> {
                             val txt = try {
@@ -172,22 +180,13 @@ class MainActivity: FlutterActivity() {
             }
     }
 
-    /// Android 8 兼容：手写 readFully 替代 InputStream.readNBytes
-    private fun readFully(input: InputStream, buf: ByteArray, len: Int): Int {
-        var total = 0
-        while (total < len) {
-            val n = input.read(buf, total, len - total)
-            if (n <= 0) break
-            total += n
-        }
-        return total
-    }
-
     private fun unpackTarGz(tarGz: File, dest: File) {
-        if (!tarGz.exists()) throw Exception("源文件不存在: ${tarGz.absolutePath}")
+        if (!tarGz.exists()) throw Exception("源文件不存在")
         if (tarGz.length() < 100) throw Exception("源文件太小")
         dest.mkdirs()
-        GZIPInputStream(BufferedInputStream(tarGz.inputStream(), 65536)).use { gz -> untar(gz, dest) }
+        GZIPInputStream(BufferedInputStream(tarGz.inputStream(), 65536)).use { gz ->
+            untar(gz, dest)
+        }
     }
 
     private fun untar(input: InputStream, dest: File) {
@@ -236,7 +235,7 @@ class MainActivity: FlutterActivity() {
                                 val buf = ByteArray(65536)
                                 while (rem > 0) {
                                     val toRead = minOf(rem, 65536L).toInt()
-                                    val n = input.read(buf, 0, toRead)
+                                    val n = readFully(input, buf, toRead)
                                     if (n <= 0) break
                                     fos.write(buf, 0, n)
                                     rem -= n
@@ -247,7 +246,7 @@ class MainActivity: FlutterActivity() {
                             var rem = size
                             val buf = ByteArray(8192)
                             while (rem > 0) {
-                                val n = input.read(buf, 0, minOf(rem, 8192L).toInt())
+                                val n = readFully(input, buf, minOf(rem, 8192L).toInt())
                                 if (n <= 0) break
                                 rem -= n
                             }
@@ -257,7 +256,7 @@ class MainActivity: FlutterActivity() {
                         var rem = size
                         val buf = ByteArray(8192)
                         while (rem > 0) {
-                            val n = input.read(buf, 0, minOf(rem, 8192L).toInt())
+                            val n = readFully(input, buf, minOf(rem, 8192L).toInt())
                             if (n <= 0) break
                             rem -= n
                         }
@@ -269,70 +268,15 @@ class MainActivity: FlutterActivity() {
         }
     }
 
-    private fun findNodeBin(root: File): File? {
-        val candidates = listOf(
-            File(root, "node/bin/node"),
-            File(root, "node/node"),
-            File(root, "bin/node"),
-            File(root, "node/bin/node.exe"),
-        )
-        for (c in candidates) if (c.exists()) return c
-        // 递归找名叫 node 的可执行文件
-        val found = root.walkTopDown().maxDepth(3)
-            .firstOrNull { it.isFile && it.name == "node" }
-        return found
-    }
-
-    private fun findAppJs(root: File): File? {
-        val candidates = listOf(
-            File(root, "backend/app.js"),
-            File(root, "backend/backend/app.js"),
-            File(root, "app.js"),
-        )
-        for (c in candidates) if (c.exists()) return c
-        return root.walkTopDown().maxDepth(4)
-            .firstOrNull { it.isFile && it.name == "app.js" }
-    }
-
-    /// 递归列目录，返回文本树
-    private fun listTree(root: File, maxDepth: Int = 3): String {
-        if (!root.exists()) return "(目录不存在)"
-        val sb = StringBuilder()
-        fun walk(f: File, prefix: String, depth: Int) {
-            if (depth > maxDepth) return
-            val children = f.listFiles() ?: return
-            for ((i, c) in children.withIndex()) {
-                val last = i == children.size - 1
-                sb.append(prefix).append(if (last) "└─ " else "├─ ")
-                sb.append(c.name)
-                if (c.isDirectory) sb.append("/")
-                else sb.append(" (").append(c.length() / 1024).append(" KB)")
-                sb.append("\n")
-                if (c.isDirectory) {
-                    walk(c, prefix + if (last) "   " else "│  ", depth + 1)
-                }
-            }
-        }
-        walk(root, "", 0)
-        return sb.toString()
-    }
-
     private fun startNode(): Boolean {
         val root = File(filesDir, "backend_runtime")
-        val node = findNodeBin(root)
-        val app = findAppJs(root)
-        if (node == null) {
-            throw Exception("找不到 node 二进制\n" +
-              "backend_runtime 结构:\n" + listTree(root))
-        }
-        if (app == null) {
-            throw Exception("找不到 app.js\n" +
-              "backend_runtime 结构:\n" + listTree(root))
-        }
+        val node = File(root, "node/bin/node")
+        val app = File(root, "backend/app.js")
+        if (!node.exists()) throw Exception("node 不存在")
+        if (!app.exists()) throw Exception("app.js 不存在")
 
         nodeProc?.destroy(); nodeProc = null
 
-        // ✅ 加 --jitless 避免 SELinux W^X 限制
         val pb = ProcessBuilder(node.absolutePath, "--jitless", app.absolutePath)
         pb.directory(File(root, "backend"))
         pb.redirectErrorStream(true)
@@ -343,41 +287,24 @@ class MainActivity: FlutterActivity() {
         env["NODE_ENV"] = "production"
         env["HOME"] = root.absolutePath
         env["TMPDIR"] = cacheDir.absolutePath
-        // ✅ 关键修复：OpenSSL 编译时 OPENSSLDIR 硬编码为 Termux 路径
-        // App 沙箱访问不了 → 设空配置绕过
         env["OPENSSL_CONF"] = "/dev/null"
-        // 证书路径（部分 node 版本会读）
         env["SSL_CERT_FILE"] = "/system/etc/security/cacerts"
         env["SSL_CERT_DIR"] = "/system/etc/security/cacerts"
 
         nodeProc = pb.start()
-        val nodeOutput = StringBuilder()
         Thread {
             try {
                 val r = nodeProc?.inputStream?.bufferedReader() ?: return@Thread
                 while (true) {
                     val line = r.readLine() ?: break
                     android.util.Log.i("KuGou-Node", line)
-                    synchronized(nodeOutput) {
-                        nodeOutput.append(line).append("\n")
-                        if (nodeOutput.length > 4000) {
-                            nodeOutput.delete(0, nodeOutput.length - 4000)
-                        }
-                    }
                 }
             } catch (_: Throwable) {}
         }.start()
 
         Thread.sleep(2000)
         if (nodeProc?.isAlive != true) {
-            val code = nodeProc?.exitValue()
-            val out = synchronized(nodeOutput) { nodeOutput.toString() }
-            val msg = "node 进程立即退出 (code=$code)\n" +
-                      "可能原因: SELinux W^X 或缺少依赖\n" +
-                      "--- node 输出 ---\n" +
-                      (if (out.isEmpty()) "(无输出)" else out)
-            logCrash("startNode-exit", Exception(msg))
-            throw Exception(msg)
+            throw Exception("node 立即退出 (code=${nodeProc?.exitValue()})")
         }
         return true
     }
