@@ -126,14 +126,17 @@ class BackendManager {
       connectTimeout: const Duration(seconds: 15),
       receiveTimeout: const Duration(minutes: 5)));
     await dio.download(url, destPath, onReceiveProgress: (r, t) {
-      if (t > 0) {
-        final pct = (r / t * 100).toStringAsFixed(1);
-        final mb = (r / 1024 / 1024).toStringAsFixed(2);
-        final tmb = (t / 1024 / 1024).toStringAsFixed(2);
-        log('$label  $pct%  $mb / $tmb MB');
-        _emit(r / t * 0.8);
-      }
-    });
+        if (t > 0) {
+          final pct = (r / t * 100).toInt();
+          if (pct != _lastDownloadPct) {
+            _lastDownloadPct = pct;
+            final mb = (r / 1024 / 1024).toStringAsFixed(1);
+            final tmb = (t / 1024 / 1024).toStringAsFixed(1);
+            log('$label  $pct%  $mb / $tmb MB');
+          }
+          _emit(r / t * 0.8);
+        }
+      };
     final size = await File(destPath).length();
     if (size < 1024) throw Exception('$fileName 太小');
     log('$label 完成 (${(size / 1024 / 1024).toStringAsFixed(2)} MB)', LogLevel.ok);
