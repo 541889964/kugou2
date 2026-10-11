@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,7 +12,7 @@ class TerminalPage extends StatefulWidget {
   State<TerminalPage> createState() => _T();
 }
 
-class _T extends State<TerminalPage> with TickerProviderStateMixin {
+class _T extends State<TerminalPage> {
   final List<TermLine> _lines = [];
   final ScrollController _scroll = ScrollController();
   StreamSubscription? _logSub;
@@ -42,7 +41,7 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     final t = line.text;
     if (t.contains('测速')) {
       _phase = 1;
-    } else if (t.contains('下载 Node') || t.contains('下载 KuGou')) {
+    } else if (t.contains('下载 Node') || t.contains('下载 KuGou') || t.contains('并发下载')) {
       _phase = 2;
     } else if (t.contains('解压')) {
       _phase = 3;
@@ -54,8 +53,11 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
-        _scroll.animateTo(_scroll.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 180), curve: Curves.easeOut);
+        _scroll.animateTo(
+          _scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeOut,
+        );
       }
     });
   }
@@ -63,29 +65,60 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   Future<void> _start() async {
     if (_running) return;
     setState(() {
-      _running = true; _done = false; _success = false; _phase = 1;
+      _running = true;
+      _done = false;
+      _success = false;
+      _phase = 1;
     });
     final ok = await BackendManager.setupAndStart();
     if (!mounted) return;
     setState(() {
-      _running = false; _done = true; _success = ok; _phase = ok ? 5 : 0;
+      _running = false;
+      _done = true;
+      _success = ok;
+      _phase = ok ? 5 : 0;
     });
     HapticFeedback.mediumImpact();
-  }
-
-  Future<void> _stop() async {
-    await BackendManager.stop();
-    BackendManager.log('已发送停止信号', LogLevel.warn);
-    setState(() { _running = false; _done = true; _success = false; });
   }
 
   Future<void> _clear() async {
     await BackendManager.clear();
     if (!mounted) return;
     setState(() {
-      _lines.clear(); _progress = 0; _done = false; _success = false; _phase = 0;
+      _lines.clear();
+      _progress = 0;
+      _done = false;
+      _success = false;
+      _phase = 0;
     });
     BackendManager.log('已清空已解压文件', LogLevel.warn);
+  }
+
+  Future<void> _showCrashLog() async {
+    final log = await BackendManager.getCrashLog();
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF0B0F14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text('崩溃日志', style: TextStyle(
+          fontFamily: 'monospace', fontSize: 14, color: Color(0xFFF87171))),
+        content: SizedBox(
+          width: double.maxFinite,
+          height: 400,
+          child: SingleChildScrollView(
+            child: SelectableText(
+              log.isEmpty ? '(无日志)' : log,
+              style: const TextStyle(
+                fontFamily: 'monospace', fontSize: 10,
+                color: Colors.white70, height: 1.4))),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('关闭')),
+        ]));
   }
 
   @override
@@ -120,27 +153,26 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
       backgroundColor: const Color(0xFF05070A),
       body: Stack(children: [
         Positioned.fill(child: CustomPaint(painter: _GridPainter())),
-
-        _glow(top: -80, right: -60, color: AppTheme.p, size: 300),
-        _glow(bottom: -100, left: -80, color: AppTheme.s, size: 260),
+        Positioned(top: -80, right: -60,
+          child: Container(width: 300, height: 300,
+            decoration: BoxDecoration(shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [
+                AppTheme.p.withOpacity(_running ? 0.28 : 0.12),
+                Colors.transparent])))),
+        Positioned(bottom: -100, left: -80,
+          child: Container(width: 260, height: 260,
+            decoration: BoxDecoration(shape: BoxShape.circle,
+              gradient: RadialGradient(colors: [
+                AppTheme.s.withOpacity(_running ? 0.20 : 0.08),
+                Colors.transparent])))),
         SafeArea(child: Column(children: [
           _header(),
-          _phaseRing(),
+          _phaseIndicator(),
           Expanded(child: _terminal()),
           _bottomBar(),
         ])),
       ]),
     );
-  }
-
-  Widget _glow({double? top, double? bottom, double? left, double? right,
-      required Color color, required double size}) {
-    return Positioned(
-      top: top, bottom: bottom, left: left, right: right,
-      child: Container(width: size, height: size,
-        decoration: BoxDecoration(shape: BoxShape.circle,
-          gradient: RadialGradient(colors: [
-            color.withOpacity(_running ? 0.28 : 0.12), Colors.transparent]))));
   }
 
   Widget _header() {
@@ -152,8 +184,10 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
         color: Colors.white.withOpacity(0.04),
         border: Border.all(color: Colors.white.withOpacity(0.08))),
       child: Row(children: [
-        IconButton(icon: const Icon(Icons.keyboard_arrow_down, size: 26, color: Colors.white),
-          splashRadius: 20, onPressed: () => Navigator.pop(context, _success)),
+        IconButton(
+          icon: const Icon(Icons.keyboard_arrow_down, size: 26, color: Colors.white),
+          splashRadius: 20,
+          onPressed: () => Navigator.pop(context, _success)),
         const SizedBox(width: 4),
         _dot(const Color(0xFFFF5F56)),
         const SizedBox(width: 6),
@@ -174,14 +208,13 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
           const SizedBox(width: 18, height: 18,
             child: CircularProgressIndicator(strokeWidth: 2,
               valueColor: AlwaysStoppedAnimation(Color(0xFF4ADE80)))),
-      ]),
-    );
+      ]));
   }
 
   Widget _dot(Color c) => Container(width: 11, height: 11,
     decoration: BoxDecoration(shape: BoxShape.circle, color: c));
 
-  Widget _phaseRing() {
+  Widget _phaseIndicator() {
     const phases = ['测速', '下载', '解压', '启动', '完成'];
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
@@ -194,7 +227,19 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
         Row(children: List.generate(phases.length, (i) => Expanded(
           child: _phaseDot(i, phases[i])))),
         const SizedBox(height: 12),
-        _progressBar(),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: Stack(children: [
+            Container(height: 4, color: Colors.white.withOpacity(0.05)),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 240),
+              height: 4,
+              width: MediaQuery.of(context).size.width * _progress * 0.92,
+              decoration: BoxDecoration(
+                gradient: AppTheme.grad,
+                boxShadow: [BoxShadow(color: AppTheme.p.withOpacity(0.6),
+                  blurRadius: 8, spreadRadius: 1)])),
+          ])),
         const SizedBox(height: 6),
         Row(children: [
           Text('进度 ${(_progress * 100).toStringAsFixed(0)}%',
@@ -203,8 +248,7 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
           const Spacer(),
           _statusText(),
         ]),
-      ]),
-    );
+      ]));
   }
 
   Widget _phaseDot(int i, String label) {
@@ -227,23 +271,6 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
         fontWeight: active ? FontWeight.w700 : FontWeight.w400,
         color: active ? Colors.white : (passed ? AppTheme.s : Colors.white.withOpacity(0.3)))),
     ]);
-  }
-
-  Widget _progressBar() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(3),
-      child: Stack(children: [
-        Container(height: 4, color: Colors.white.withOpacity(0.05)),
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 240),
-          height: 4,
-          width: MediaQuery.of(context).size.width * _progress * 0.92,
-          decoration: BoxDecoration(
-            gradient: AppTheme.grad,
-            boxShadow: [BoxShadow(color: AppTheme.p.withOpacity(0.6),
-              blurRadius: 8, spreadRadius: 1)])),
-      ]),
-    );
   }
 
   Widget _statusText() {
@@ -287,7 +314,14 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
   }
 
   Widget _terminalBody() {
-    if (_lines.isEmpty) return _emptyTerminal();
+    if (_lines.isEmpty) {
+      return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+        Icon(Icons.terminal, size: 48, color: Colors.white.withOpacity(0.15)),
+        const SizedBox(height: 12),
+        Text('等待初始化…', style: TextStyle(fontFamily: 'monospace',
+          fontSize: 13, color: Colors.white.withOpacity(0.3))),
+      ]));
+    }
     return ListView.builder(
       controller: _scroll,
       padding: const EdgeInsets.all(14),
@@ -296,27 +330,18 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
     );
   }
 
-  Widget _emptyTerminal() {
-    return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(Icons.terminal, size: 48, color: Colors.white.withOpacity(0.15)),
-      const SizedBox(height: 12),
-      Text('等待初始化…', style: TextStyle(fontFamily: 'monospace',
-        fontSize: 13, color: Colors.white.withOpacity(0.3))),
-    ]));
-  }
-
   Widget _terminalLine(BuildContext ctx, int i) {
     final line = _lines[i];
     return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 1.5),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(_prefix(line.level), style: TextStyle(fontFamily: 'monospace',
-            fontSize: 12, color: _color(line.level), fontWeight: FontWeight.w700)),
-          const SizedBox(width: 8),
-          Expanded(child: Text(line.text.isEmpty ? ' ' : line.text,
-            style: TextStyle(fontFamily: 'monospace',
-              fontSize: 12, height: 1.5, color: _color(line.level)))),
-        ]),
+      padding: const EdgeInsets.symmetric(vertical: 1.5),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(_prefix(line.level), style: TextStyle(fontFamily: 'monospace',
+          fontSize: 12, color: _color(line.level), fontWeight: FontWeight.w700)),
+        const SizedBox(width: 8),
+        Expanded(child: Text(line.text.isEmpty ? ' ' : line.text,
+          style: TextStyle(fontFamily: 'monospace',
+            fontSize: 12, height: 1.5, color: _color(line.level)))),
+      ]),
     );
   }
 
@@ -336,10 +361,10 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
         const SizedBox(width: 6),
         IconButton(
           icon: const Icon(Icons.delete_sweep_outlined, size: 18, color: Colors.white54),
-          splashRadius: 18, tooltip: '清空重装',
+          splashRadius: 18,
+          tooltip: '清空重装',
           onPressed: _running ? null : _clear),
-      ]),
-    );
+      ]));
   }
 
   Widget _statusDot() {
@@ -390,19 +415,19 @@ class _T extends State<TerminalPage> with TickerProviderStateMixin {
         onPressed: () => Navigator.pop(context, true),
         child: const Text('完成', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)));
     }
-    // 失败：显示「查看崩溃日志」+「重试」
     return Row(mainAxisSize: MainAxisSize.min, children: [
       TextButton(
         onPressed: _showCrashLog,
         style: TextButton.styleFrom(
           foregroundColor: Colors.white70,
-          padding: const EdgeInsets.symmetric(horizontal: 8)),
-        child: const Text('查看崩溃日志', style: TextStyle(fontSize: 11))),
+          padding: const EdgeInsets.symmetric(horizontal: 6)),
+        child: const Text('日志', style: TextStyle(fontSize: 11))),
+      const SizedBox(width: 4),
       FilledButton(
         style: FilledButton.styleFrom(
           backgroundColor: const Color(0xFFFBBF24),
           foregroundColor: Colors.black,
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
         onPressed: _start,
         child: const Text('重试', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700))),
