@@ -25,7 +25,7 @@ class BackendManager {
   static const _shaKey = 'backend_sha';
 
   /// 分片下载线程数（GitHub release 支持 Range，6~8 线程性价比最高）
-  static const _threads = 8;
+  static const _threads = 1;
 
   static final _logCtrl = StreamController<TermLine>.broadcast();
   static Stream<TermLine> get logs => _logCtrl.stream;
