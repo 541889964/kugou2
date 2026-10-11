@@ -226,6 +226,13 @@ class BackendManager {
 
       log('');
       log('【4/4】启动 Node 进程…');
+      // 启动前打印目录结构
+      log('解压目录:');
+      final tree = await listExtractedDir();
+      for (final line in tree.split('\n').take(40)) {
+        if (line.isNotEmpty) log('  $line');
+      }
+      log('');
       return await _startAndWait();
     } catch (e) {
       log('失败: $e', LogLevel.err);
@@ -295,6 +302,12 @@ class BackendManager {
   static Future<bool> clear() async {
     try { return await _ch.invokeMethod<bool>('clear') ?? false; }
     catch (_) { return false; }
+  }
+
+  /// 列出解压后的目录结构（诊断用）
+  static Future<String> listExtractedDir() async {
+    try { return await _ch.invokeMethod<String>('listDir') ?? '(空)'; }
+    catch (_) { return '(读目录失败)'; }
   }
 
   static Future<String> getCrashLog() async {

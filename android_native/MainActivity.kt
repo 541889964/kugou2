@@ -148,6 +148,15 @@ class MainActivity: FlutterActivity() {
                             } catch (_: Throwable) {}
                             safeReply { result.success(true) }
                         }
+                        "listDir" -> {
+                            try {
+                                val root = File(filesDir, "backend_runtime")
+                                val txt = listTree(root, 4)
+                                safeReply { result.success(txt) }
+                            } catch (e: Throwable) {
+                                safeReply { result.success("listDir 失败: ${e.message}") }
+                            }
+                        }
                         "crashLog" -> {
                             val txt = try {
                                 if (crashLogFile().exists()) crashLogFile().readText() else ""
@@ -260,12 +269,66 @@ class MainActivity: FlutterActivity() {
         }
     }
 
+    private fun findNodeBin(root: File): File? {
+        val candidates = listOf(
+            File(root, "node/bin/node"),
+            File(root, "node/node"),
+            File(root, "bin/node"),
+            File(root, "node/bin/node.exe"),
+        )
+        for (c in candidates) if (c.exists()) return c
+        // 递归找名叫 node 的可执行文件
+        val found = root.walkTopDown().maxDepth(3)
+            .firstOrNull { it.isFile && it.name == "node" }
+        return found
+    }
+
+    private fun findAppJs(root: File): File? {
+        val candidates = listOf(
+            File(root, "backend/app.js"),
+            File(root, "backend/backend/app.js"),
+            File(root, "app.js"),
+        )
+        for (c in candidates) if (c.exists()) return c
+        return root.walkTopDown().maxDepth(4)
+            .firstOrNull { it.isFile && it.name == "app.js" }
+    }
+
+    /// 递归列目录，返回文本树
+    private fun listTree(root: File, maxDepth: Int = 3): String {
+        if (!root.exists()) return "(目录不存在)"
+        val sb = StringBuilder()
+        fun walk(f: File, prefix: String, depth: Int) {
+            if (depth > maxDepth) return
+            val children = f.listFiles() ?: return
+            for ((i, c) in children.withIndex()) {
+                val last = i == children.size - 1
+                sb.append(prefix).append(if (last) "└─ " else "├─ ")
+                sb.append(c.name)
+                if (c.isDirectory) sb.append("/")
+                else sb.append(" (").append(c.length() / 1024).append(" KB)")
+                sb.append("\n")
+                if (c.isDirectory) {
+                    walk(c, prefix + if (last) "   " else "│  ", depth + 1)
+                }
+            }
+        }
+        walk(root, "", 0)
+        return sb.toString()
+    }
+
     private fun startNode(): Boolean {
         val root = File(filesDir, "backend_runtime")
-        val node = File(root, "node/bin/node")
-        val app = File(root, "backend/app.js")
-        if (!node.exists()) throw Exception("node 不存在")
-        if (!app.exists()) throw Exception("app.js 不存在")
+        val node = findNodeBin(root)
+        val app = findAppJs(root)
+        if (node == null) {
+            throw Exception("找不到 node 二进制\n" +
+              "backend_runtime 结构:\n" + listTree(root))
+        }
+        if (app == null) {
+            throw Exception("找不到 app.js\n" +
+              "backend_runtime 结构:\n" + listTree(root))
+        }
 
         nodeProc?.destroy(); nodeProc = null
 
