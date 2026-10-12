@@ -408,6 +408,7 @@ class MainActivity: FlutterActivity() {
         env["OPENSSL_CONF"] = "/dev/null"
         env["SSL_CERT_FILE"] = "/system/etc/security/cacerts"
         env["SSL_CERT_DIR"] = "/system/etc/security/cacerts"
+        env["platform"] = "lite"
 
         nodeProc = pb.start()
         Thread {

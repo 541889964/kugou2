@@ -106,7 +106,7 @@ class KuGouApi {
 
   Future<Map?> getSongUrl(String hash, {String albumId = '', String? audioId}) async {
     try {
-      final params = <String, dynamic>{'id': hash};
+      final params = <String, dynamic>{'id': hash, 'quality': 'flac'};
       if (audioId != null && audioId.isNotEmpty) params['album_audio_id'] = audioId;
       final r = await _dio.get('$_base/song/url',
         queryParameters: params,
@@ -118,7 +118,11 @@ class KuGouApi {
         if (u is List && u.isNotEmpty) return {'url': u[0].toString()};
         final bu = d['backupUrl'] ?? d['data']?['backupUrl'];
         if (bu is List && bu.isNotEmpty) return {'url': bu[0].toString()};
-        if (d['error_code'] == 20018) return {'error':'VIP_ONLY','message':'VIP 权限不足'};
+        final ec = d['error_code'];
+      if (ec == 20018) {
+        return {'error':'VIP_ONLY','message':'VIP 权限不足',
+                'error_code': ec, 'priv_status': d['priv_status']};
+      }
       }
       return {'error':'NO_URL','message':'未返回 URL'};
     } catch (e) { return {'error':'BACKEND_ERR','message':'后端请求失败: $e'}; }
